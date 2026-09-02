@@ -39,3 +39,36 @@ export function getEffectiveQuantity(
 
   return Math.max(0, product.quantity - consumed);
 }
+
+/**
+ * How many more whole days until the current quantity is projected to hit
+ * zero, counting down smoothly from the day it was last set -- e.g. 1 milk
+ * carton at "1 every 3 days" shows 3, then 2, then 1, then "out", rather
+ * than staying at 3 until the quantity itself drops.
+ *
+ * This is intentionally independent of getEffectiveQuantity's stepwise
+ * (floored) display value -- it projects forward from the *original*
+ * quantity and elapsed real time, so it ticks down daily even on days
+ * where the displayed quantity number hasn't changed yet.
+ *
+ * Returns null if there's no rate configured, or no quantity to project from.
+ */
+export function getDaysRemaining(
+  product: Pick<
+    Product,
+    'quantity' | 'quantityUpdatedAt' | 'consumptionRateAmount' | 'consumptionRateDays'
+  >,
+  now: Date = new Date()
+): number | null {
+  if (product.quantity == null) return null;
+  if (!product.consumptionRateAmount || !product.consumptionRateDays) return null;
+
+  const ratePerDay = product.consumptionRateAmount / product.consumptionRateDays;
+  const totalDurationDays = product.quantity / ratePerDay;
+
+  const updatedAt = new Date(product.quantityUpdatedAt);
+  const elapsedMs = now.getTime() - updatedAt.getTime();
+  const elapsedDays = Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, Math.ceil(totalDurationDays - elapsedDays));
+}

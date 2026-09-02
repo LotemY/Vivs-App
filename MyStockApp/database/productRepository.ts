@@ -33,6 +33,8 @@ export async function createProduct(data: NewProduct): Promise<number> {
       price: data.price,
       unit: data.unit,
       quantity: data.quantity,
+      consumption_rate_amount: data.consumptionRateAmount,
+      consumption_rate_days: data.consumptionRateDays,
       photo_url: data.photoUrl,
       manual_override_days: data.manualOverrideDays,
     })
@@ -51,6 +53,9 @@ export async function updateProduct(id: number, data: NewProduct): Promise<void>
       price: data.price,
       unit: data.unit,
       quantity: data.quantity,
+      quantity_updated_at: new Date().toISOString(), // every save resets the decay clock
+      consumption_rate_amount: data.consumptionRateAmount,
+      consumption_rate_days: data.consumptionRateDays,
       photo_url: data.photoUrl,
       manual_override_days: data.manualOverrideDays,
     })

@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { listProducts } from '../../database/productRepository';
-import { getEffectiveQuantity } from '../../database/consumption';
+import { getEffectiveQuantity, getDaysRemaining } from '../../database/consumption';
 import type { Product } from '../../types';
 
 export default function StorageScreen() {
@@ -40,12 +40,22 @@ export default function StorageScreen() {
             Nothing to show yet — add products from the Products tab.
           </Text>
         }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.quantity}>{getEffectiveQuantity(item) ?? '—'}</Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const daysLeft = getDaysRemaining(item);
+          return (
+            <View style={styles.row}>
+              <Text style={styles.name}>{item.name}</Text>
+              <View style={styles.quantityGroup}>
+                <Text style={styles.quantity}>{getEffectiveQuantity(item) ?? '—'}</Text>
+                {daysLeft != null && (
+                  <Text style={styles.daysLeft}>
+                    {daysLeft <= 0 ? 'out soon' : `${daysLeft}d left`}
+                  </Text>
+                )}
+              </View>
+            </View>
+          );
+        }}
       />
     </View>
   );
@@ -65,5 +75,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
   },
   name: { fontSize: 16, fontWeight: '600' },
+  quantityGroup: { alignItems: 'flex-end' },
   quantity: { fontSize: 15, color: '#444' },
+  daysLeft: { fontSize: 12, color: '#999', marginTop: 2 },
 });
