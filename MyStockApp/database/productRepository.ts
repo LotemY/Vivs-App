@@ -1,74 +1,66 @@
 // database/productRepository.ts
-import { type SQLiteDatabase } from 'expo-sqlite';
+import { supabase } from './supabaseClient';
 import type { Product, NewProduct } from '../types';
-import {
-  rowToProduct,
-  PRODUCT_COLUMNS_NO_PHOTO,
-  PRODUCT_COLUMNS_WITH_PHOTO,
-  type ProductRow,
-} from './mappers';
+import { rowToProduct, type ProductRow } from './mappers';
 
-/** List view — excludes photo BLOB for speed. */
-export async function listProducts(db: SQLiteDatabase): Promise<Product[]> {
-  const rows = await db.getAllAsync<ProductRow>(
-    `SELECT ${PRODUCT_COLUMNS_NO_PHOTO} FROM products ORDER BY name COLLATE NOCASE ASC`
-  );
-  return rows.map(rowToProduct);
+/** List view -- no `db` argument anymore, the Supabase client is a module-level singleton. */
+export async function listProducts(): Promise<Product[]> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return (data as ProductRow[]).map(rowToProduct);
 }
 
-/** Single product with photo — use for detail/edit screens. */
-export async function getProduct(
-  db: SQLiteDatabase,
-  id: number
-): Promise<Product | null> {
-  const row = await db.getFirstAsync<ProductRow>(
-    `SELECT ${PRODUCT_COLUMNS_WITH_PHOTO} FROM products WHERE id = ?`,
-    [id]
-  );
-  return row ? rowToProduct(row) : null;
+export async function getProduct(id: number): Promise<Product | null> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? rowToProduct(data as ProductRow) : null;
 }
 
-export async function createProduct(
-  db: SQLiteDatabase,
-  data: NewProduct
-): Promise<number> {
-  const result = await db.runAsync(
-    `INSERT INTO products (name, price, unit, quantity, photo, manual_override_days)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      data.name,
-      data.price,
-      data.unit,
-      data.quantity,
-      data.photo,
-      data.manualOverrideDays,
-    ]
-  );
-  return result.lastInsertRowId;
+export async function createProduct(data: NewProduct): Promise<number> {
+  const { data: row, error } = await supabase
+    .from('products')
+    .insert({
+      name: data.name,
+      price: data.price,
+      unit: data.unit,
+      quantity: data.quantity,
+      photo_url: data.photoUrl,
+      manual_override_days: data.manualOverrideDays,
+    })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return row.id;
 }
 
-export async function updateProduct(
-  db: SQLiteDatabase,
-  id: number,
-  data: NewProduct
-): Promise<void> {
-  await db.runAsync(
-    `UPDATE products
-     SET name = ?, price = ?, unit = ?, quantity = ?, photo = ?, manual_override_days = ?
-     WHERE id = ?`,
-    [
-      data.name,
-      data.price,
-      data.unit,
-      data.quantity,
-      data.photo,
-      data.manualOverrideDays,
-      id,
-    ]
-  );
+export async function updateProduct(id: number, data: NewProduct): Promise<void> {
+  const { error } = await supabase
+    .from('products')
+    .update({
+      name: data.name,
+      price: data.price,
+      unit: data.unit,
+      quantity: data.quantity,
+      photo_url: data.photoUrl,
+      manual_override_days: data.manualOverrideDays,
+    })
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
-export async function deleteProduct(db: SQLiteDatabase, id: number): Promise<void> {
+export async function deleteProduct(id: number): Promise<void> {
   // restock_log rows for this product are removed automatically via ON DELETE CASCADE
-  await db.runAsync(`DELETE FROM products WHERE id = ?`, [id]);
+  const { error } = await supabase.from('products').delete().eq('id', id);
+  if (error) throw error;
 }

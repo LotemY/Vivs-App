@@ -1,19 +1,14 @@
 // database/mappers.ts
 import type { Product, RestockLogEntry } from '../types';
 
-/**
- * Raw shape as it comes back from SQLite (snake_case columns).
- * `photo` is included as optional because list queries should
- * omit it (see productColumnsNoPhoto below) — only detail/edit
- * queries need to pull the actual bytes.
- */
+/** Raw shape as it comes back from Supabase (snake_case columns, matching the SQL schema). */
 export interface ProductRow {
   id: number;
   name: string;
   price: number | null;
   unit: string | null;
   quantity: number | null;
-  photo?: Uint8Array | null;
+  photo_url: string | null;
   average_days_between_restocks: number | null;
   manual_override_days: number | null;
   created_at: string;
@@ -26,13 +21,6 @@ export interface RestockLogRow {
   quantity: number | null;
 }
 
-/** Column list for list views — deliberately excludes the `photo` BLOB. */
-export const PRODUCT_COLUMNS_NO_PHOTO =
-  'id, name, price, unit, quantity, average_days_between_restocks, manual_override_days, created_at';
-
-/** Full column list, including `photo` — use only for single-item detail fetches. */
-export const PRODUCT_COLUMNS_WITH_PHOTO = `${PRODUCT_COLUMNS_NO_PHOTO}, photo`;
-
 export function rowToProduct(row: ProductRow): Product {
   return {
     id: row.id,
@@ -40,7 +28,7 @@ export function rowToProduct(row: ProductRow): Product {
     price: row.price,
     unit: row.unit,
     quantity: row.quantity,
-    photo: row.photo ?? null,
+    photoUrl: row.photo_url,
     averageDaysBetweenRestocks: row.average_days_between_restocks,
     manualOverrideDays: row.manual_override_days,
     createdAt: row.created_at,

@@ -27,7 +27,7 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
       price: price.trim() ? Number(price) : null,
       unit: unit.trim() || null,
       quantity: quantity.trim() ? Number(quantity) : null,
-      photo: initial?.photo ?? null, // photo picking arrives in Section 6
+      photoUrl: initial?.photoUrl ?? null, // photo picking arrives in Section 6
       manualOverrideDays: initial?.manualOverrideDays ?? null,
     });
   }

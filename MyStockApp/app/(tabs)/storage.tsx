@@ -2,23 +2,21 @@
 import { useCallback, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { listProducts } from '../../database/productRepository';
 import type { Product } from '../../types';
 
 export default function StorageScreen() {
-  const db = useSQLiteContext();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await listProducts(db);
+    const data = await listProducts();
     // Lowest quantity first — what's about to run out is most useful to see
     data.sort((a, b) => (a.quantity ?? Infinity) - (b.quantity ?? Infinity));
     setProducts(data);
     setLoading(false);
-  }, [db]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

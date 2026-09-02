@@ -2,7 +2,6 @@
 import { useCallback, useState } from 'react';
 import { View, ActivityIndicator, Text, Pressable, StyleSheet } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { ProductForm } from '../../components/ProductForm';
 import { getProduct, updateProduct, deleteProduct } from '../../database/productRepository';
 import type { NewProduct, Product } from '../../types';
@@ -10,7 +9,6 @@ import type { NewProduct, Product } from '../../types';
 export default function EditProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const productId = Number(id);
-  const db = useSQLiteContext();
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +17,7 @@ export default function EditProductScreen() {
     useCallback(() => {
       let cancelled = false;
       setLoading(true);
-      getProduct(db, productId).then((p) => {
+      getProduct(productId).then((p) => {
         if (!cancelled) {
           setProduct(p);
           setLoading(false);
@@ -28,17 +26,17 @@ export default function EditProductScreen() {
       return () => {
         cancelled = true;
       };
-    }, [db, productId])
+    }, [productId])
   );
 
   async function handleSubmit(data: NewProduct) {
-    await updateProduct(db, productId, data);
-    router.back();
+    await updateProduct(productId, data);
+    router.replace('/');
   }
 
   async function handleDelete() {
-    await deleteProduct(db, productId);
-    router.back();
+    await deleteProduct(productId);
+    router.replace('/');
   }
 
   if (loading) {

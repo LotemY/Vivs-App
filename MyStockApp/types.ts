@@ -2,7 +2,8 @@
 
 /**
  * A tracked household item.
- * `photo` is raw image bytes (BLOB) stored directly in SQLite — optional.
+ * `photoUrl` points to a file in the Supabase "product-photos" storage
+ * bucket -- the database itself never holds image bytes.
  * `averageDaysBetweenRestocks` is a cached value, recomputed whenever a
  * new restock is logged (see Section 4).
  * `manualOverrideDays` lets the user set an expected restock interval
@@ -14,7 +15,7 @@ export interface Product {
   price: number | null;
   unit: string | null;          // e.g. "kg", "pack", "bottle", "roll"
   quantity: number | null;      // current amount on hand
-  photo: Uint8Array | null;     // BLOB, nullable
+  photoUrl: string | null;
   averageDaysBetweenRestocks: number | null;
   manualOverrideDays: number | null;
   createdAt: string;            // ISO 8601

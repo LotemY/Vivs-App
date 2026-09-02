@@ -1,4 +1,4 @@
-// app/(tabs)/index.tsx
+// app/items.tsx
 import { useCallback, useState } from 'react';
 import {
   View,
@@ -9,23 +9,21 @@ import {
   Alert,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 import { listProducts, deleteProduct } from '../../database/productRepository';
 import type { Product } from '../../types';
 
 export default function ProductsScreen() {
-  const db = useSQLiteContext();
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await listProducts(db);
+    const data = await listProducts();
     setProducts(data);
     setLoading(false);
-  }, [db]);
+  }, []);
 
   // Reload every time this tab regains focus (e.g. after add/edit/delete)
   useFocusEffect(
@@ -44,7 +42,7 @@ export default function ProductsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteProduct(db, product.id);
+            await deleteProduct(product.id);
             load();
           },
         },
@@ -75,7 +73,7 @@ export default function ProductsScreen() {
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>
                 {item.quantity ?? '—'} {item.unit ?? ''}
-                {item.price != null ? `  ·  $${item.price.toFixed(2)}` : ''}
+                {item.price != null ? `  ·  €${item.price.toFixed(2)}` : ''}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#999" />
