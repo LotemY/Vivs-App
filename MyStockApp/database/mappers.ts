@@ -8,6 +8,9 @@ export interface ProductRow {
   price: number | null;
   unit: string | null;
   quantity: number | null;
+  quantity_updated_at: string;
+  consumption_rate_amount: number | null;
+  consumption_rate_days: number | null;
   photo_url: string | null;
   average_days_between_restocks: number | null;
   manual_override_days: number | null;
@@ -28,6 +31,9 @@ export function rowToProduct(row: ProductRow): Product {
     price: row.price,
     unit: row.unit,
     quantity: row.quantity,
+    quantityUpdatedAt: row.quantity_updated_at,
+    consumptionRateAmount: row.consumption_rate_amount,
+    consumptionRateDays: row.consumption_rate_days,
     photoUrl: row.photo_url,
     averageDaysBetweenRestocks: row.average_days_between_restocks,
     manualOverrideDays: row.manual_override_days,

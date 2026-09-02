@@ -14,6 +14,12 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
   const [price, setPrice] = useState(initial?.price?.toString() ?? '');
   const [unit, setUnit] = useState(initial?.unit ?? '');
   const [quantity, setQuantity] = useState(initial?.quantity?.toString() ?? '');
+  const [rateAmount, setRateAmount] = useState(
+    initial?.consumptionRateAmount?.toString() ?? ''
+  );
+  const [rateDays, setRateDays] = useState(
+    initial?.consumptionRateDays?.toString() ?? ''
+  );
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit() {
@@ -27,6 +33,8 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
       price: price.trim() ? Number(price) : null,
       unit: unit.trim() || null,
       quantity: quantity.trim() ? Number(quantity) : null,
+      consumptionRateAmount: rateAmount.trim() ? Number(rateAmount) : null,
+      consumptionRateDays: rateDays.trim() ? Number(rateDays) : null,
       photoUrl: initial?.photoUrl ?? null, // photo picking arrives in Section 6
       manualOverrideDays: initial?.manualOverrideDays ?? null,
     });
@@ -73,6 +81,36 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
         />
       </Field>
 
+      <Text style={styles.sectionLabel}>Consumption rate (optional)</Text>
+      <Text style={styles.sectionHint}>
+        Lets Storage show a live estimate of what's left, e.g. "3 units every 1
+        day" for something eaten daily, or "1 unit every 3 days" for something
+        that lasts a few days per unit.
+      </Text>
+      <View style={styles.rateRow}>
+        <View style={styles.rateField}>
+          <Text style={styles.label}>Uses</Text>
+          <TextInput
+            style={styles.input}
+            value={rateAmount}
+            onChangeText={setRateAmount}
+            placeholder="e.g. 3"
+            keyboardType="decimal-pad"
+          />
+        </View>
+        <Text style={styles.rateConnector}>every</Text>
+        <View style={styles.rateField}>
+          <Text style={styles.label}>days</Text>
+          <TextInput
+            style={styles.input}
+            value={rateDays}
+            onChangeText={setRateDays}
+            placeholder="e.g. 1"
+            keyboardType="number-pad"
+          />
+        </View>
+      </View>
+
       {error && <Text style={styles.error}>{error}</Text>}
 
       <Pressable style={styles.button} onPress={handleSubmit}>
@@ -104,6 +142,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   error: { color: '#dc2626', marginBottom: 12 },
+  sectionLabel: { fontSize: 15, fontWeight: '600', marginTop: 4, marginBottom: 4 },
+  sectionHint: { fontSize: 12, color: '#777', marginBottom: 12, lineHeight: 17 },
+  rateRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16, gap: 8 },
+  rateField: { flex: 1 },
+  rateConnector: { color: '#777', marginBottom: 12, paddingHorizontal: 2 },
   button: {
     backgroundColor: '#2563eb',
     borderRadius: 8,

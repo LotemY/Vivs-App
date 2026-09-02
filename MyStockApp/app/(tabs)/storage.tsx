@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { listProducts } from '../../database/productRepository';
+import { getEffectiveQuantity } from '../../database/consumption';
 import type { Product } from '../../types';
 
 export default function StorageScreen() {
@@ -12,8 +13,10 @@ export default function StorageScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     const data = await listProducts();
-    // Lowest quantity first — what's about to run out is most useful to see
-    data.sort((a, b) => (a.quantity ?? Infinity) - (b.quantity ?? Infinity));
+    // Lowest *effective* (decayed) quantity first — what's about to run out
+    data.sort(
+      (a, b) => (getEffectiveQuantity(a) ?? Infinity) - (getEffectiveQuantity(b) ?? Infinity)
+    );
     setProducts(data);
     setLoading(false);
   }, []);
@@ -40,9 +43,7 @@ export default function StorageScreen() {
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.quantity}>
-              {item.quantity ?? '—'} {item.unit ?? ''}
-            </Text>
+            <Text style={styles.quantity}>{getEffectiveQuantity(item) ?? '—'}</Text>
           </View>
         )}
       />

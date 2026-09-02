@@ -14,15 +14,21 @@ export interface Product {
   name: string;
   price: number | null;
   unit: string | null;          // e.g. "kg", "pack", "bottle", "roll"
-  quantity: number | null;      // current amount on hand
+  quantity: number | null;      // amount on hand as of quantityUpdatedAt
+  quantityUpdatedAt: string;    // ISO 8601 -- when quantity was last explicitly set
+  consumptionRateAmount: number | null; // e.g. 3 (units)
+  consumptionRateDays: number | null;   // e.g. 1 (day) -- together: "3 units every 1 day"
   photoUrl: string | null;
   averageDaysBetweenRestocks: number | null;
   manualOverrideDays: number | null;
   createdAt: string;            // ISO 8601
 }
 
-/** Shape used when creating a product (id/createdAt are generated). */
-export type NewProduct = Omit<Product, 'id' | 'createdAt' | 'averageDaysBetweenRestocks'>;
+/** Shape used when creating a product (id/createdAt/quantityUpdatedAt are generated). */
+export type NewProduct = Omit<
+  Product,
+  'id' | 'createdAt' | 'averageDaysBetweenRestocks' | 'quantityUpdatedAt'
+>;
 
 /**
  * A single purchase/restock event for a product.
