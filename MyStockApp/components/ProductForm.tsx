@@ -1,24 +1,28 @@
 // components/ProductForm.tsx
 import { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
-import type { NewProduct, Product } from '../types';
+import type { NewProduct, ProductUpdate, Product } from '../types';
 
-interface Props {
-  initial?: Product;
-  onSubmit: (data: NewProduct) => void | Promise<void>;
-  submitLabel: string;
-}
+type Props =
+  | {
+      mode: 'create';
+      initial?: undefined;
+      onSubmit: (data: NewProduct) => void | Promise<void>;
+      submitLabel: string;
+    }
+  | {
+      mode: 'edit';
+      initial: Product;
+      onSubmit: (data: ProductUpdate) => void | Promise<void>;
+      submitLabel: string;
+    };
 
-export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
+export function ProductForm({ mode, initial, onSubmit, submitLabel }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [price, setPrice] = useState(initial?.price?.toString() ?? '');
   const [unit, setUnit] = useState(initial?.unit ?? '');
-  const [rateAmount, setRateAmount] = useState(
-    initial?.consumptionRateAmount?.toString() ?? ''
-  );
-  const [rateDays, setRateDays] = useState(
-    initial?.consumptionRateDays?.toString() ?? ''
-  );
+  const [rateAmount, setRateAmount] = useState('');
+  const [rateDays, setRateDays] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit() {
@@ -27,15 +31,24 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
       return;
     }
     setError(null);
-    onSubmit({
+
+    const base = {
       name: name.trim(),
       price: price.trim() ? Number(price) : null,
       unit: unit.trim() || null,
-      consumptionRateAmount: rateAmount.trim() ? Number(rateAmount) : null,
-      consumptionRateDays: rateDays.trim() ? Number(rateDays) : null,
       photoUrl: initial?.photoUrl ?? null, // photo picking arrives in Section 6
       manualOverrideDays: initial?.manualOverrideDays ?? null,
-    });
+    };
+
+    if (mode === 'create') {
+      onSubmit({
+        ...base,
+        consumptionRateAmount: rateAmount.trim() ? Number(rateAmount) : null,
+        consumptionRateDays: rateDays.trim() ? Number(rateDays) : null,
+      });
+    } else {
+      onSubmit(base);
+    }
   }
 
   return (
@@ -72,30 +85,34 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
         </View>
       </Field>
 
-      <Text style={styles.sectionLabel}>Consumption rate (optional)</Text>
-      <View style={styles.rateRow}>
-        <View style={styles.rateField}>
-          <Text style={styles.label}>Uses</Text>
-          <TextInput
-            style={styles.input}
-            value={rateAmount}
-            onChangeText={setRateAmount}
-            placeholder="e.g. 3"
-            keyboardType="decimal-pad"
-          />
-        </View>
-        <Text style={styles.rateConnector}>every</Text>
-        <View style={styles.rateField}>
-          <Text style={styles.label}>days</Text>
-          <TextInput
-            style={styles.input}
-            value={rateDays}
-            onChangeText={setRateDays}
-            placeholder="e.g. 1"
-            keyboardType="number-pad"
-          />
-        </View>
-      </View>
+      {mode === 'create' ? (
+        <>
+          <Text style={styles.sectionLabel}>Consumption rate (optional)</Text>
+          <View style={styles.rateRow}>
+            <View style={styles.rateField}>
+              <Text style={styles.label}>Uses</Text>
+              <TextInput
+                style={styles.input}
+                value={rateAmount}
+                onChangeText={setRateAmount}
+                placeholder="e.g. 3"
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <Text style={styles.rateConnector}>every</Text>
+            <View style={styles.rateField}>
+              <Text style={styles.label}>days</Text>
+              <TextInput
+                style={styles.input}
+                value={rateDays}
+                onChangeText={setRateDays}
+                placeholder="e.g. 1"
+                keyboardType="number-pad"
+              />
+            </View>
+          </View>
+        </>
+      ) : null}
 
       {error && <Text style={styles.error}>{error}</Text>}
 

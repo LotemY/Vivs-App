@@ -72,3 +72,16 @@ export function getDaysRemaining(
 
   return Math.max(0, Math.ceil(totalDurationDays - elapsedDays));
 }
+
+/**
+ * The raw consumption rate as units/day -- e.g. cookies at "3 every 1 day"
+ * returns 3, milk at "1 every 3 days" returns 0.33. Useful for showing the
+ * actual number driving the decay, not just its effects (days-left, etc).
+ * Returns null if no rate is configured.
+ */
+export function getConsumptionRatePerDay(
+  product: Pick<Product, 'consumptionRateAmount' | 'consumptionRateDays'>
+): number | null {
+  if (!product.consumptionRateAmount || !product.consumptionRateDays) return null;
+  return product.consumptionRateAmount / product.consumptionRateDays;
+}

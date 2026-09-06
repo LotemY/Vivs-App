@@ -3,9 +3,10 @@ import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { listProducts, updateProductQuantities } from '../../database/productRepository';
-import { getEffectiveQuantity, getDaysRemaining } from '../../database/consumption';
-import type { Product } from '../../types';
+import { listProducts, applyShoppingChanges, listAllRestockLogs } from '../../database/productRepository';
+import { getEffectiveQuantity, getDaysRemaining, getConsumptionRatePerDay } from '../../database/consumption';
+import { computeAverageRestockDays } from '../../database/restockStats';
+import type { Product, RestockLogEntry } from '../../types';
 
 /** Local, unsaved quantity for one product while a shopping session is active. */
 interface SessionEntry {
@@ -15,6 +16,7 @@ interface SessionEntry {
 
 export default function StorageScreen() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [avgRestockDays, setAvgRestockDays] = useState<Record<number, number | null>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // null = not in shopping mode. Present = { [productId]: SessionEntry }
@@ -22,11 +24,22 @@ export default function StorageScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await listProducts();
+    const [data, allLogs] = await Promise.all([listProducts(), listAllRestockLogs()]);
+
+    const logsByProduct: Record<number, RestockLogEntry[]> = {};
+    for (const log of allLogs) {
+      (logsByProduct[log.productId] ??= []).push(log);
+    }
+    const averages: Record<number, number | null> = {};
+    for (const p of data) {
+      averages[p.id] = computeAverageRestockDays(logsByProduct[p.id] ?? []);
+    }
+
     data.sort(
       (a, b) => (getEffectiveQuantity(a) ?? Infinity) - (getEffectiveQuantity(b) ?? Infinity)
     );
     setProducts(data);
+    setAvgRestockDays(averages);
     setLoading(false);
   }, []);
 
@@ -62,10 +75,15 @@ export default function StorageScreen() {
 
   async function save() {
     if (!session) return;
-    const changes = Object.entries(session)
-      .map(([id, entry]) => ({ id: Number(id), ...entry }))
-      .filter((e) => e.current !== e.start)
-      .map((e) => ({ id: e.id, quantity: e.current }));
+    const changes = products
+      .map((product) => {
+        const entry = session[product.id];
+        return entry ? { product, newQuantity: entry.current } : null;
+      })
+      .filter(
+        (c): c is { product: Product; newQuantity: number } =>
+          c != null && c.newQuantity !== (c.product.quantity ?? 0)
+      );
 
     if (changes.length === 0) {
       setSession(null);
@@ -74,7 +92,7 @@ export default function StorageScreen() {
 
     setSaving(true);
     try {
-      await updateProductQuantities(changes);
+      await applyShoppingChanges(changes);
       setSession(null);
       await load();
     } finally {
@@ -111,13 +129,22 @@ export default function StorageScreen() {
           const changed = entry != null && entry.current !== entry.start;
           const displayQuantity = entry ? entry.current : getEffectiveQuantity(item);
           const daysLeft = getDaysRemaining(item);
+          const avgDays = avgRestockDays[item.id];
+          const ratePerDay = getConsumptionRatePerDay(item);
+
+          const daysLeftText =
+            daysLeft == null ? 'no rate set' : daysLeft <= 0 ? 'out soon' : `${daysLeft}d left`;
+          const avgText = avgDays != null ? ` · avg ${Math.round(avgDays)}d cycle` : '';
+          const rateText = ratePerDay != null ? ` · ${ratePerDay.toFixed(1)}/day` : '';
 
           return (
             <View style={[styles.row, changed && styles.rowChanged]}>
               <View style={styles.rowText}>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.sub}>
-                  {daysLeft == null ? 'no rate set' : daysLeft <= 0 ? 'out soon' : `${daysLeft}d left`}
+                  {daysLeftText}
+                  {rateText}
+                  {avgText}
                 </Text>
               </View>
 

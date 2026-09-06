@@ -4,7 +4,7 @@ import { View, ActivityIndicator, Text, Pressable, StyleSheet } from 'react-nati
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ProductForm } from '../../components/ProductForm';
 import { getProduct, updateProduct, deleteProduct } from '../../database/productRepository';
-import type { NewProduct, Product } from '../../types';
+import type { ProductUpdate, Product } from '../../types';
 
 export default function EditProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,7 +29,7 @@ export default function EditProductScreen() {
     }, [productId])
   );
 
-  async function handleSubmit(data: NewProduct) {
+  async function handleSubmit(data: ProductUpdate) {
     await updateProduct(productId, data);
     router.replace('/');
   }
@@ -57,7 +57,7 @@ export default function EditProductScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ProductForm initial={product} onSubmit={handleSubmit} submitLabel="Save Changes" />
+      <ProductForm mode="edit" initial={product} onSubmit={handleSubmit} submitLabel="Save Changes" />
       <Pressable style={styles.deleteButton} onPress={handleDelete}>
         <Text style={styles.deleteText}>Delete Product</Text>
       </Pressable>

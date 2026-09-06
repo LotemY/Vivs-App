@@ -25,14 +25,25 @@ export interface Product {
 }
 
 /**
- * Shape used when creating/editing a product via the form.
- * Notably excludes `quantity` and `quantityUpdatedAt` -- those are no
- * longer set here at all, only via Storage's shopping-mode save.
+ * Shape used when creating a product. Consumption rate is included here
+ * ONLY -- it's a one-time seed value at creation. See ProductUpdate below
+ * for why it's excluded everywhere else.
  */
 export type NewProduct = Omit<
   Product,
   'id' | 'createdAt' | 'averageDaysBetweenRestocks' | 'quantityUpdatedAt' | 'quantity'
 >;
+
+/**
+ * Shape used when editing an EXISTING product (name, price, unit, etc).
+ * Deliberately excludes consumptionRateAmount/consumptionRateDays --
+ * after creation, the rate is only ever updated by a real shopping-mode
+ * usage correction, never by the edit form. This prevents a stale edit
+ * screen (opened before a shopping-mode correction happened elsewhere,
+ * e.g. on another phone) from silently overwriting newer, more accurate
+ * rate data with whatever it loaded when it was first opened.
+ */
+export type ProductUpdate = Omit<NewProduct, 'consumptionRateAmount' | 'consumptionRateDays'>;
 
 /**
  * A single purchase/restock event for a product.

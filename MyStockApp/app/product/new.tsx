@@ -12,5 +12,5 @@ export default function NewProductScreen() {
     router.replace('/');
   }
 
-  return <ProductForm onSubmit={handleSubmit} submitLabel="Add Product" />;
+  return <ProductForm mode="create" onSubmit={handleSubmit} submitLabel="Add Product" />;
 }
