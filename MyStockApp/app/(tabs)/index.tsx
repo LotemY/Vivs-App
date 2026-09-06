@@ -7,11 +7,13 @@ import {
   Pressable,
   StyleSheet,
   Alert,
+  Image,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { listProducts, deleteProduct } from '../../database/productRepository';
 import { cancelNotificationForProduct } from '../../database/notifications';
+import { deleteProductPhoto } from '../../database/photoUpload';
 import type { Product } from '../../types';
 
 export default function ProductsScreen() {
@@ -45,6 +47,9 @@ export default function ProductsScreen() {
           onPress: async () => {
             await cancelNotificationForProduct(product.id);
             await deleteProduct(product.id);
+            if (product.photoUrl) {
+              deleteProductPhoto(product.photoUrl); // best-effort, not awaited
+            }
             load();
           },
         },
@@ -71,6 +76,13 @@ export default function ProductsScreen() {
             onPress={() => router.push(`/product/${item.id}`)}
             onLongPress={() => confirmDelete(item)}
           >
+            {item.photoUrl ? (
+              <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
+            ) : (
+              <View style={styles.thumbnailPlaceholder}>
+                <Ionicons name="image-outline" size={18} color="#bbb" />
+              </View>
+            )}
             <View style={styles.rowText}>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>
@@ -104,6 +116,16 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
   },
   rowText: { flex: 1 },
+  thumbnail: { width: 40, height: 40, borderRadius: 8, marginRight: 12 },
+  thumbnailPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   name: { fontSize: 16, fontWeight: '600' },
   meta: { fontSize: 13, color: '#777', marginTop: 2 },
   fab: {
