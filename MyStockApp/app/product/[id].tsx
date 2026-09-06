@@ -5,12 +5,16 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ProductForm } from '../../components/ProductForm';
 import { getProduct, updateProduct, deleteProduct } from '../../database/productRepository';
 import { cancelNotificationForProduct } from '../../database/notifications';
+import { useTheme } from '../../theme/ThemeContext';
+import type { ThemeColors } from '../../theme/colors';
 import type { ProductUpdate, Product } from '../../types';
 
 export default function EditProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const productId = Number(id);
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +48,7 @@ export default function EditProductScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -52,7 +56,7 @@ export default function EditProductScreen() {
   if (!product) {
     return (
       <View style={styles.center}>
-        <Text>Product not found.</Text>
+        <Text style={styles.notFoundText}>Product not found.</Text>
       </View>
     );
   }
@@ -67,8 +71,11 @@ export default function EditProductScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  deleteButton: { marginHorizontal: 16, marginTop: 8, alignItems: 'center', padding: 12 },
-  deleteText: { color: '#dc2626', fontSize: 15, fontWeight: '600' },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    notFoundText: { color: colors.textPrimary },
+    deleteButton: { marginHorizontal: 16, marginTop: 8, alignItems: 'center', padding: 12 },
+    deleteText: { color: colors.danger, fontSize: 15, fontWeight: '600' },
+  });
+}

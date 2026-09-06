@@ -7,6 +7,8 @@ import { listProducts, getProduct, applyShoppingChanges, listAllRestockLogs } fr
 import { getEffectiveQuantity, getDaysRemaining, getConsumptionRatePerDay } from '../../database/consumption';
 import { computeAverageRestockDays } from '../../database/restockStats';
 import { scheduleRunningLowNotification } from '../../database/notifications';
+import { useTheme } from '../../theme/ThemeContext';
+import type { ThemeColors } from '../../theme/colors';
 import type { Product, RestockLogEntry } from '../../types';
 
 /** Local, unsaved quantity for one product while a shopping session is active. */
@@ -16,6 +18,8 @@ interface SessionEntry {
 }
 
 export default function StorageScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [products, setProducts] = useState<Product[]>([]);
   const [avgRestockDays, setAvgRestockDays] = useState<Record<number, number | null>>({});
   const [loading, setLoading] = useState(true);
@@ -121,7 +125,7 @@ export default function StorageScreen() {
       <View style={styles.header}>
         {!shopping && (
           <Pressable style={styles.shopButton} onPress={startShopping}>
-            <Ionicons name="cart-outline" size={16} color="#2563eb" />
+            <Ionicons name="cart-outline" size={16} color={colors.accent} />
             <Text style={styles.shopButtonText}>Go shopping</Text>
           </Pressable>
         )}
@@ -169,7 +173,7 @@ export default function StorageScreen() {
                     onPress={() => adjust(item.id, -1)}
                     accessibilityLabel={`Decrease ${item.name} quantity`}
                   >
-                    <Ionicons name="remove" size={16} color="#333" />
+                    <Ionicons name="remove" size={16} color={colors.textPrimary} />
                   </Pressable>
                   <Text style={[styles.quantity, changed && styles.quantityChanged]}>
                     {displayQuantity}
@@ -179,7 +183,7 @@ export default function StorageScreen() {
                     onPress={() => adjust(item.id, 1)}
                     accessibilityLabel={`Increase ${item.name} quantity`}
                   >
-                    <Ionicons name="add" size={16} color="#333" />
+                    <Ionicons name="add" size={16} color={colors.textPrimary} />
                   </Pressable>
                 </View>
               ) : (
@@ -208,69 +212,77 @@ export default function StorageScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  shopButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#2563eb',
-  },
-  shopButtonText: { color: '#2563eb', fontWeight: '600', fontSize: 14 },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { color: '#888', textAlign: 'center', paddingHorizontal: 32 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e0e0e0',
-  },
-  rowChanged: { backgroundColor: '#eff6ff' },
-  rowText: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600' },
-  sub: { fontSize: 12, color: '#999', marginTop: 2 },
-  quantity: { fontSize: 17, fontWeight: '600', color: '#444', minWidth: 24, textAlign: 'center' },
-  quantityChanged: { color: '#2563eb' },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepperButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ccc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBar: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e0e0e0',
-    backgroundColor: '#fff',
-  },
-  saveBarButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  discardButton: { borderWidth: StyleSheet.hairlineWidth, borderColor: '#ccc' },
-  discardButtonText: { color: '#444', fontWeight: '600' },
-  saveButton: { backgroundColor: '#2563eb' },
-  saveButtonText: { color: 'white', fontWeight: '600' },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 4,
+    },
+    shopButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.accent,
+    },
+    shopButtonText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    emptyText: { color: colors.textMuted, textAlign: 'center', paddingHorizontal: 32 },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    rowChanged: { backgroundColor: colors.changedRowBg },
+    rowText: { flex: 1 },
+    name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    sub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+    quantity: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      minWidth: 24,
+      textAlign: 'center',
+    },
+    quantityChanged: { color: colors.accent },
+    stepper: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    stepperButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    saveBar: {
+      flexDirection: 'row',
+      gap: 8,
+      padding: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    saveBarButton: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    discardButton: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+    discardButtonText: { color: colors.textSecondary, fontWeight: '600' },
+    saveButton: { backgroundColor: colors.accent },
+    saveButtonText: { color: colors.onAccent, fontWeight: '600' },
+  });
+}

@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { initNotifications } from '../database/notifications';
+import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -9,7 +10,23 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Stack>
+    <ThemeProvider>
+      <ThemedStack />
+    </ThemeProvider>
+  );
+}
+
+function ThemedStack() {
+  const { colors } = useTheme();
+
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.surface },
+        headerTintColor: colors.textPrimary,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="product/new" options={{ title: 'Add Product' }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Edit Product' }} />
