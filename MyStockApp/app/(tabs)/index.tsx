@@ -11,6 +11,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { listProducts, deleteProduct } from '../../database/productRepository';
+import { cancelNotificationForProduct } from '../../database/notifications';
 import type { Product } from '../../types';
 
 export default function ProductsScreen() {
@@ -42,6 +43,7 @@ export default function ProductsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            await cancelNotificationForProduct(product.id);
             await deleteProduct(product.id);
             load();
           },

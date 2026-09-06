@@ -1,7 +1,13 @@
 // app/_layout.tsx
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
+import { initNotifications } from '../database/notifications';
 
 export default function RootLayout() {
+  useEffect(() => {
+    initNotifications();
+  }, []);
+
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

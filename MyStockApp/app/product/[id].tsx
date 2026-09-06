@@ -4,6 +4,7 @@ import { View, ActivityIndicator, Text, Pressable, StyleSheet } from 'react-nati
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ProductForm } from '../../components/ProductForm';
 import { getProduct, updateProduct, deleteProduct } from '../../database/productRepository';
+import { cancelNotificationForProduct } from '../../database/notifications';
 import type { ProductUpdate, Product } from '../../types';
 
 export default function EditProductScreen() {
@@ -35,6 +36,7 @@ export default function EditProductScreen() {
   }
 
   async function handleDelete() {
+    await cancelNotificationForProduct(productId);
     await deleteProduct(productId);
     router.replace('/');
   }

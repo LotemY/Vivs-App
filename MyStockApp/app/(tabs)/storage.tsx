@@ -3,9 +3,10 @@ import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { listProducts, applyShoppingChanges, listAllRestockLogs } from '../../database/productRepository';
+import { listProducts, getProduct, applyShoppingChanges, listAllRestockLogs } from '../../database/productRepository';
 import { getEffectiveQuantity, getDaysRemaining, getConsumptionRatePerDay } from '../../database/consumption';
 import { computeAverageRestockDays } from '../../database/restockStats';
+import { scheduleRunningLowNotification } from '../../database/notifications';
 import type { Product, RestockLogEntry } from '../../types';
 
 /** Local, unsaved quantity for one product while a shopping session is active. */
@@ -94,6 +95,19 @@ export default function StorageScreen() {
     try {
       await applyShoppingChanges(changes);
       setSession(null);
+
+      // Reschedule notifications using the freshly-updated rate/quantity/
+      // timestamp for exactly the products that changed -- not the stale
+      // in-memory objects from before the save.
+      const updatedProducts = await Promise.all(
+        changes.map((c) => getProduct(c.product.id))
+      );
+      await Promise.all(
+        updatedProducts
+          .filter((p): p is Product => p != null)
+          .map((p) => scheduleRunningLowNotification(p))
+      );
+
       await load();
     } finally {
       setSaving(false);
