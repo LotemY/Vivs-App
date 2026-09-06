@@ -13,7 +13,6 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [price, setPrice] = useState(initial?.price?.toString() ?? '');
   const [unit, setUnit] = useState(initial?.unit ?? '');
-  const [quantity, setQuantity] = useState(initial?.quantity?.toString() ?? '');
   const [rateAmount, setRateAmount] = useState(
     initial?.consumptionRateAmount?.toString() ?? ''
   );
@@ -32,7 +31,6 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
       name: name.trim(),
       price: price.trim() ? Number(price) : null,
       unit: unit.trim() || null,
-      quantity: quantity.trim() ? Number(quantity) : null,
       consumptionRateAmount: rateAmount.trim() ? Number(rateAmount) : null,
       consumptionRateDays: rateDays.trim() ? Number(rateDays) : null,
       photoUrl: initial?.photoUrl ?? null, // photo picking arrives in Section 6
@@ -52,16 +50,6 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
         />
       </Field>
 
-      <Field label="Quantity on hand">
-        <TextInput
-          style={styles.input}
-          value={quantity}
-          onChangeText={setQuantity}
-          placeholder="e.g. 2"
-          keyboardType="decimal-pad"
-        />
-      </Field>
-
       <Field label="Unit">
         <TextInput
           style={styles.input}
@@ -72,21 +60,19 @@ export function ProductForm({ initial, onSubmit, submitLabel }: Props) {
       </Field>
 
       <Field label="Price">
-        <TextInput
-          style={styles.input}
-          value={price}
-          onChangeText={setPrice}
-          placeholder="e.g. 6.99"
-          keyboardType="decimal-pad"
-        />
+        <View style={styles.priceInputWrap}>
+          <Text style={styles.currencyPrefix}>€</Text>
+          <TextInput
+            style={styles.priceInput}
+            value={price}
+            onChangeText={setPrice}
+            placeholder="6.99"
+            keyboardType="decimal-pad"
+          />
+        </View>
       </Field>
 
       <Text style={styles.sectionLabel}>Consumption rate (optional)</Text>
-      <Text style={styles.sectionHint}>
-        Lets Storage show a live estimate of what's left, e.g. "3 units every 1
-        day" for something eaten daily, or "1 unit every 3 days" for something
-        that lasts a few days per unit.
-      </Text>
       <View style={styles.rateRow}>
         <View style={styles.rateField}>
           <Text style={styles.label}>Uses</Text>
@@ -139,6 +125,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    fontSize: 16,
+  },
+  priceInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingLeft: 12,
+  },
+  currencyPrefix: { fontSize: 16, color: '#555', marginRight: 4 },
+  priceInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingRight: 12,
     fontSize: 16,
   },
   error: { color: '#dc2626', marginBottom: 12 },

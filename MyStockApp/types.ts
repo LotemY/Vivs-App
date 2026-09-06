@@ -24,10 +24,14 @@ export interface Product {
   createdAt: string;            // ISO 8601
 }
 
-/** Shape used when creating a product (id/createdAt/quantityUpdatedAt are generated). */
+/**
+ * Shape used when creating/editing a product via the form.
+ * Notably excludes `quantity` and `quantityUpdatedAt` -- those are no
+ * longer set here at all, only via Storage's shopping-mode save.
+ */
 export type NewProduct = Omit<
   Product,
-  'id' | 'createdAt' | 'averageDaysBetweenRestocks' | 'quantityUpdatedAt'
+  'id' | 'createdAt' | 'averageDaysBetweenRestocks' | 'quantityUpdatedAt' | 'quantity'
 >;
 
 /**

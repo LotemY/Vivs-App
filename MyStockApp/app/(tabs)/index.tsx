@@ -1,4 +1,4 @@
-// app/items.tsx
+// app/(tabs)/index.tsx
 import { useCallback, useState } from 'react';
 import {
   View,
@@ -72,7 +72,7 @@ export default function ProductsScreen() {
             <View style={styles.rowText}>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>
-                {item.quantity ?? '—'} {item.unit ?? ''}
+                {item.unit ?? 'no unit'}
                 {item.price != null ? `  ·  €${item.price.toFixed(2)}` : ''}
               </Text>
             </View>

@@ -4,7 +4,6 @@
     "slug": "MyStockApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
@@ -23,7 +22,8 @@
     },
     "plugins": [
       "expo-sqlite",
-      "expo-router"
+      "expo-router",
+      "expo-status-bar"
     ]
   }
 }

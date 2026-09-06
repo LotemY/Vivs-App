@@ -32,7 +32,7 @@ export async function createProduct(data: NewProduct): Promise<number> {
       name: data.name,
       price: data.price,
       unit: data.unit,
-      quantity: data.quantity,
+      quantity: 0, // set later via Storage's shopping mode, not the form
       consumption_rate_amount: data.consumptionRateAmount,
       consumption_rate_days: data.consumptionRateDays,
       photo_url: data.photoUrl,
@@ -52,8 +52,9 @@ export async function updateProduct(id: number, data: NewProduct): Promise<void>
       name: data.name,
       price: data.price,
       unit: data.unit,
-      quantity: data.quantity,
-      quantity_updated_at: new Date().toISOString(), // every save resets the decay clock
+      // quantity / quantity_updated_at intentionally omitted -- editing a
+      // product's details must never touch stock levels or reset the
+      // decay clock. That's exclusively Storage's job now.
       consumption_rate_amount: data.consumptionRateAmount,
       consumption_rate_days: data.consumptionRateDays,
       photo_url: data.photoUrl,
@@ -68,4 +69,26 @@ export async function deleteProduct(id: number): Promise<void> {
   // restock_log rows for this product are removed automatically via ON DELETE CASCADE
   const { error } = await supabase.from('products').delete().eq('id', id);
   if (error) throw error;
+}
+
+/**
+ * Partial update -- only touches quantity (and resets the decay clock).
+ * Used by Storage's shopping-mode Save, which batches every changed row
+ * into one set of concurrent requests fired once, rather than one write
+ * per +/- tap.
+ */
+export async function updateProductQuantities(
+  changes: { id: number; quantity: number }[]
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const results = await Promise.all(
+    changes.map(({ id, quantity }) =>
+      supabase
+        .from('products')
+        .update({ quantity, quantity_updated_at: nowIso })
+        .eq('id', id)
+    )
+  );
+  const firstError = results.find((r) => r.error)?.error;
+  if (firstError) throw firstError;
 }
