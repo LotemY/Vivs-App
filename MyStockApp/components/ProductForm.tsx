@@ -181,7 +181,6 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel }: Props) {
 
       <Field colors={colors} label="Price">
         <View style={styles.priceInputWrap}>
-          <Text style={styles.currencyPrefix}>€</Text>
           <TextInput
             style={styles.priceInput}
             value={price}
@@ -190,6 +189,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel }: Props) {
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
           />
+          <Text style={styles.currencyPrefix}>€</Text>
         </View>
       </Field>
 

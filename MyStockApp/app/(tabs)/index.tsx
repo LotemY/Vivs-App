@@ -91,7 +91,7 @@ export default function ProductsScreen() {
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>
                 {item.unit ?? 'no unit'}
-                {item.price != null ? `  ·  €${item.price.toFixed(2)}` : ''}
+                {item.price != null ? `  ·  ${item.price.toFixed(2)} €` : ''}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
