@@ -1,6 +1,15 @@
 // app/product/[id].tsx
 import { useCallback, useState } from 'react';
-import { View, ActivityIndicator, Text, Pressable, StyleSheet } from 'react-native';
+import {
+  View,
+  ActivityIndicator,
+  Text,
+  Pressable,
+  StyleSheet,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+} from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ProductForm } from '../../components/ProductForm';
 import { getProduct, updateProduct, deleteProduct } from '../../database/productRepository';
@@ -62,12 +71,26 @@ export default function EditProductScreen() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <ProductForm mode="edit" initial={product} onSubmit={handleSubmit} submitLabel="Save Changes" />
-      <Pressable style={styles.deleteButton} onPress={handleDelete}>
-        <Text style={styles.deleteText}>Delete Product</Text>
-      </Pressable>
-    </View>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 200 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <ProductForm
+          mode="edit"
+          initial={product}
+          onSubmit={handleSubmit}
+          submitLabel="Save Changes"
+          onCancel={() => router.back()}
+        />
+        <Pressable style={styles.deleteButton} onPress={handleDelete}>
+          <Text style={styles.deleteText}>Delete Product</Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

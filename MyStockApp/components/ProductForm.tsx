@@ -14,15 +14,17 @@ type Props =
       initial?: undefined;
       onSubmit: (data: NewProduct) => void | Promise<void>;
       submitLabel: string;
+      onCancel?: () => void;
     }
   | {
       mode: 'edit';
       initial: Product;
       onSubmit: (data: ProductUpdate) => void | Promise<void>;
       submitLabel: string;
+      onCancel?: () => void;
     };
 
-export function ProductForm({ mode, initial, onSubmit, submitLabel }: Props) {
+export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: Props) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
@@ -226,13 +228,28 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel }: Props) {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSubmit} disabled={saving}>
-        {saving ? (
-          <ActivityIndicator color={colors.onAccent} />
-        ) : (
-          <Text style={styles.buttonText}>{submitLabel}</Text>
+      <View style={styles.actionRow}>
+        {onCancel && (
+          <Pressable
+            style={[styles.actionButton, styles.discardButton]}
+            onPress={onCancel}
+            disabled={saving}
+          >
+            <Text style={styles.discardButtonText}>Discard</Text>
+          </Pressable>
         )}
-      </Pressable>
+        <Pressable
+          style={[styles.actionButton, styles.button, saving && styles.buttonDisabled]}
+          onPress={handleSubmit}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color={colors.onAccent} />
+          ) : (
+            <Text style={styles.buttonText}>{submitLabel}</Text>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -292,19 +309,20 @@ function makeStyles(colors: ThemeColors) {
       backgroundColor: colors.surfaceAlt,
     },
     priceInputWrap: {
+      alignSelf: 'flex-start',
+      width: '50%',
       flexDirection: 'row',
       alignItems: 'center',
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       borderRadius: 8,
-      paddingLeft: 12,
+      paddingHorizontal: 12,
       backgroundColor: colors.surfaceAlt,
     },
-    currencyPrefix: { fontSize: 16, color: colors.textSecondary, marginRight: 4 },
+    currencyPrefix: { fontSize: 16, color: colors.textSecondary, marginLeft: 4 },
     priceInput: {
       flex: 1,
       paddingVertical: 10,
-      paddingRight: 12,
       fontSize: 16,
       color: colors.textPrimary,
     },
@@ -320,14 +338,23 @@ function makeStyles(colors: ThemeColors) {
     rateRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16, gap: 8 },
     rateField: { flex: 1 },
     rateConnector: { color: colors.textMuted, marginBottom: 12, paddingHorizontal: 2 },
+    actionRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+    actionButton: { flex: 1 },
     button: {
       backgroundColor: colors.accent,
       borderRadius: 8,
       paddingVertical: 14,
       alignItems: 'center',
-      marginTop: 8,
     },
     buttonText: { color: colors.onAccent, fontSize: 16, fontWeight: '600' },
     buttonDisabled: { opacity: 0.6 },
+    discardButton: {
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: 'center',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    discardButtonText: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
   });
 }

@@ -1,6 +1,6 @@
 // app/(tabs)/storage.tsx
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, Image } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { listProducts, getProduct, applyShoppingChanges, listAllRestockLogs } from '../../database/productRepository';
@@ -157,6 +157,13 @@ export default function StorageScreen() {
 
           return (
             <View style={[styles.row, changed && styles.rowChanged]}>
+              {item.photoUrl ? (
+                <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
+              ) : (
+                <View style={styles.thumbnailPlaceholder}>
+                  <Ionicons name="image-outline" size={18} color={colors.textMuted} />
+                </View>
+              )}
               <View style={styles.rowText}>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.sub}>
@@ -245,6 +252,16 @@ function makeStyles(colors: ThemeColors) {
       borderBottomColor: colors.border,
     },
     rowChanged: { backgroundColor: colors.changedRowBg },
+    thumbnail: { width: 40, height: 40, borderRadius: 8, marginRight: 12 },
+    thumbnailPlaceholder: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+      marginRight: 12,
+      backgroundColor: colors.placeholderBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     rowText: { flex: 1 },
     name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
     sub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },

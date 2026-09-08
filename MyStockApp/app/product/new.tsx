@@ -1,4 +1,5 @@
 // app/product/new.tsx
+import { KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ProductForm } from '../../components/ProductForm';
 import { createProduct } from '../../database/productRepository';
@@ -12,5 +13,22 @@ export default function NewProductScreen() {
     router.replace('/');
   }
 
-  return <ProductForm mode="create" onSubmit={handleSubmit} submitLabel="Add Product" />;
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 200 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <ProductForm
+          mode="create"
+          onSubmit={handleSubmit}
+          submitLabel="Add Product"
+          onCancel={() => router.back()}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
 }
