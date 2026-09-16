@@ -1,10 +1,11 @@
 // components/ProductForm.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import type { NewProduct, ProductUpdate, Product } from '../types';
 import { uploadProductPhoto, deleteProductPhoto } from '../database/photoUpload';
+import { listCategories } from '../database/productRepository';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 
@@ -31,6 +32,9 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   const [name, setName] = useState(initial?.name ?? '');
   const [price, setPrice] = useState(initial?.price?.toString() ?? '');
   const [unit, setUnit] = useState(initial?.unit ?? '');
+  const [essential, setEssential] = useState(initial?.isEssential ?? false);
+  const [category, setCategory] = useState(initial?.category ?? '');
+  const [existingCategories, setExistingCategories] = useState<string[]>([]);
   const [rateAmount, setRateAmount] = useState('');
   const [rateDays, setRateDays] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +47,12 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   const [removed, setRemoved] = useState(false);
 
   const displayedPhotoUri = removed ? null : pickedUri ?? initial?.photoUrl ?? null;
+
+  useEffect(() => {
+    listCategories()
+      .then(setExistingCategories)
+      .catch(() => {}); // non-critical -- suggestions just won't show if this fails
+  }, []);
 
   async function pickFromLibrary() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -122,6 +132,8 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
         name: name.trim(),
         price: price.trim() ? Number(price) : null,
         unit: unit.trim() || null,
+        isEssential: essential,
+        category: category.trim() || null,
         photoUrl: finalPhotoUrl,
         manualOverrideDays: initial?.manualOverrideDays ?? null,
       };
@@ -147,6 +159,12 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     }
   }
 
+  // Existing categories, minus whatever's already typed -- no point
+  // suggesting the one you already have selected.
+  const categorySuggestions = existingCategories.filter(
+    (c) => c.toLowerCase() !== category.trim().toLowerCase()
+  );
+
   return (
     <View style={styles.container}>
       <Pressable style={styles.photoPicker} onPress={showPhotoOptions}>
@@ -169,6 +187,35 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
           placeholderTextColor={colors.textMuted}
           autoFocus={!initial}
         />
+      </Field>
+
+      <Pressable style={styles.checkboxRow} onPress={() => setEssential((v) => !v)}>
+        <Ionicons
+          name={essential ? 'checkbox' : 'square-outline'}
+          size={22}
+          color={essential ? colors.accent : colors.textMuted}
+        />
+        <Text style={styles.checkboxLabel}>Essential item</Text>
+        <Ionicons name="star" size={14} color={colors.accent} style={{ marginLeft: 4 }} />
+      </Pressable>
+
+      <Field colors={colors} label="Category">
+        <TextInput
+          style={styles.input}
+          value={category}
+          onChangeText={setCategory}
+          placeholder="e.g. dairy, cleaning, vegetables"
+          placeholderTextColor={colors.textMuted}
+        />
+        {categorySuggestions.length > 0 && (
+          <View style={styles.chipRow}>
+            {categorySuggestions.map((c) => (
+              <Pressable key={c} style={styles.chip} onPress={() => setCategory(c)}>
+                <Text style={styles.chipText}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </Field>
 
       <Field colors={colors} label="Unit">
@@ -308,6 +355,29 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textPrimary,
       backgroundColor: colors.surfaceAlt,
     },
+    checkboxRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 16,
+      paddingVertical: 4,
+    },
+    checkboxLabel: { fontSize: 15, color: colors.textPrimary },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 8,
+    },
+    chip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceAlt,
+    },
+    chipText: { fontSize: 13, color: colors.textSecondary },
     priceInputWrap: {
       alignSelf: 'flex-start',
       width: '50%',

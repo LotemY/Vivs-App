@@ -19,6 +19,8 @@ export interface Product {
   consumptionRateAmount: number | null; // e.g. 3 (units)
   consumptionRateDays: number | null;   // e.g. 1 (day) -- together: "3 units every 1 day"
   photoUrl: string | null;
+  isEssential: boolean;         // pinned to the top of Products/Storage, marked with a star
+  category: string | null;      // free-text, user-defined (e.g. "dairy", "cleaning")
   averageDaysBetweenRestocks: number | null;
   manualOverrideDays: number | null;
   createdAt: string;            // ISO 8601

@@ -12,6 +12,8 @@ export interface ProductRow {
   consumption_rate_amount: number | null;
   consumption_rate_days: number | null;
   photo_url: string | null;
+  is_essential: boolean;
+  category: string | null;
   average_days_between_restocks: number | null;
   manual_override_days: number | null;
   created_at: string;
@@ -35,6 +37,8 @@ export function rowToProduct(row: ProductRow): Product {
     consumptionRateAmount: row.consumption_rate_amount,
     consumptionRateDays: row.consumption_rate_days,
     photoUrl: row.photo_url,
+    isEssential: row.is_essential,
+    category: row.category,
     averageDaysBetweenRestocks: row.average_days_between_restocks,
     manualOverrideDays: row.manual_override_days,
     createdAt: row.created_at,

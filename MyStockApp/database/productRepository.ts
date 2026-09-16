@@ -41,6 +41,8 @@ export async function createProduct(data: NewProduct): Promise<number> {
       consumption_rate_amount: data.consumptionRateAmount,
       consumption_rate_days: data.consumptionRateDays,
       photo_url: data.photoUrl,
+      is_essential: data.isEssential,
+      category: data.category,
       manual_override_days: data.manualOverrideDays,
     })
     .select('id')
@@ -63,6 +65,8 @@ export async function updateProduct(id: number, data: ProductUpdate): Promise<vo
       // consumption rate -- those are only ever set by a real
       // shopping-mode correction. See ProductUpdate's doc comment.
       photo_url: data.photoUrl,
+      is_essential: data.isEssential,
+      category: data.category,
       manual_override_days: data.manualOverrideDays,
     })
     .eq('id', id);
@@ -135,6 +139,25 @@ export async function applyShoppingChanges(
       }
     })
   );
+}
+
+/**
+ * Distinct categories already in use across all products, alphabetically --
+ * powers the "pick an existing category" suggestions in the product form.
+ */
+export async function listCategories(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('category')
+    .not('category', 'is', null);
+
+  if (error) throw error;
+
+  const unique = new Set<string>();
+  for (const row of data as { category: string | null }[]) {
+    if (row.category) unique.add(row.category);
+  }
+  return Array.from(unique).sort((a, b) => a.localeCompare(b));
 }
 
 /**

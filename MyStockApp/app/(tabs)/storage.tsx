@@ -1,6 +1,6 @@
 // app/(tabs)/storage.tsx
-import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Image } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text, FlatList, Pressable, StyleSheet, Image, ScrollView } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { listProducts, getProduct, applyShoppingChanges, listAllRestockLogs } from '../../database/productRepository';
@@ -24,6 +24,7 @@ export default function StorageScreen() {
   const [avgRestockDays, setAvgRestockDays] = useState<Record<number, number | null>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // null = "All"
   // null = not in shopping mode. Present = { [productId]: SessionEntry }
   const [session, setSession] = useState<Record<number, SessionEntry> | null>(null);
 
@@ -40,9 +41,6 @@ export default function StorageScreen() {
       averages[p.id] = computeAverageRestockDays(logsByProduct[p.id] ?? []);
     }
 
-    data.sort(
-      (a, b) => (getEffectiveQuantity(a) ?? Infinity) - (getEffectiveQuantity(b) ?? Infinity)
-    );
     setProducts(data);
     setAvgRestockDays(averages);
     setLoading(false);
@@ -55,6 +53,29 @@ export default function StorageScreen() {
       load();
     }, [load])
   );
+
+  // Every category actually in use right now, alphabetically -- the filter
+  // bar is fully dynamic, not a fixed list.
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      if (p.category) set.add(p.category);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
+  // Essential items always float to the top; within that, lowest effective
+  // quantity first (closest to running out). Scoped to whichever category
+  // filter is selected (or everything, for "All").
+  const visibleProducts = useMemo(() => {
+    const filtered = categoryFilter
+      ? products.filter((p) => p.category === categoryFilter)
+      : products;
+    return [...filtered].sort((a, b) => {
+      if (a.isEssential !== b.isEssential) return a.isEssential ? -1 : 1;
+      return (getEffectiveQuantity(a) ?? Infinity) - (getEffectiveQuantity(b) ?? Infinity);
+    });
+  }, [products, categoryFilter]);
 
   function startShopping() {
     const initial: Record<number, SessionEntry> = {};
@@ -122,24 +143,51 @@ export default function StorageScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        {!shopping && (
+      {!shopping && categories.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterRow}
+        >
+          <FilterPill
+            label="All"
+            active={categoryFilter === null}
+            onPress={() => setCategoryFilter(null)}
+            colors={colors}
+          />
+          {categories.map((c) => (
+            <FilterPill
+              key={c}
+              label={c}
+              active={categoryFilter === c}
+              onPress={() => setCategoryFilter(c)}
+              colors={colors}
+            />
+          ))}
+        </ScrollView>
+      )}
+
+      {!shopping && (
+        <View style={styles.header}>
           <Pressable style={styles.shopButton} onPress={startShopping}>
             <Ionicons name="cart-outline" size={16} color={colors.accent} />
             <Text style={styles.shopButtonText}>Go shopping</Text>
           </Pressable>
-        )}
-      </View>
+        </View>
+      )}
 
       <FlatList
-        data={products}
+        data={visibleProducts}
         keyExtractor={(item) => String(item.id)}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={products.length === 0 && styles.emptyContainer}
+        contentContainerStyle={visibleProducts.length === 0 && styles.emptyContainer}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
-            Nothing to show yet — add products from the Products tab.
+            {categoryFilter
+              ? `Nothing in "${categoryFilter}" yet.`
+              : 'Nothing to show yet — add products from the Products tab.'}
           </Text>
         }
         renderItem={({ item }) => {
@@ -165,8 +213,14 @@ export default function StorageScreen() {
                 </View>
               )}
               <View style={styles.rowText}>
-                <Text style={styles.name}>{item.name}</Text>
+                <View style={styles.nameRow}>
+                  {item.isEssential && (
+                    <Ionicons name="star" size={13} color={colors.accent} style={styles.star} />
+                  )}
+                  <Text style={styles.name}>{item.name}</Text>
+                </View>
                 <Text style={styles.sub}>
+                  {item.category ? `${item.category} · ` : ''}
                   {daysLeftText}
                   {rateText}
                   {avgText}
@@ -219,14 +273,52 @@ export default function StorageScreen() {
   );
 }
 
+function FilterPill({
+  label,
+  active,
+  onPress,
+  colors,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  colors: ThemeColors;
+}) {
+  const styles = makeStyles(colors);
+  return (
+    <Pressable
+      style={[styles.filterPill, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+      onPress={onPress}
+    >
+      <Text style={[styles.filterPillText, active && { color: colors.onAccent }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    filterScroll: { flexGrow: 0 },
+    filterRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 4,
+    },
+    filterPill: {
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    filterPillText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
     header: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
       paddingHorizontal: 16,
-      paddingTop: 8,
+      paddingTop: 6,
       paddingBottom: 4,
     },
     shopButton: {
@@ -263,6 +355,8 @@ function makeStyles(colors: ThemeColors) {
       justifyContent: 'center',
     },
     rowText: { flex: 1 },
+    nameRow: { flexDirection: 'row', alignItems: 'center' },
+    star: { marginRight: 4 },
     name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
     sub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
     quantity: {
