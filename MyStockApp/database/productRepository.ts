@@ -43,6 +43,7 @@ export async function createProduct(data: NewProduct): Promise<number> {
       photo_url: data.photoUrl,
       is_essential: data.isEssential,
       category: data.category,
+      units_per_pack: data.unitsPerPack,
       manual_override_days: data.manualOverrideDays,
     })
     .select('id')
@@ -67,6 +68,7 @@ export async function updateProduct(id: number, data: ProductUpdate): Promise<vo
       photo_url: data.photoUrl,
       is_essential: data.isEssential,
       category: data.category,
+      units_per_pack: data.unitsPerPack,
       manual_override_days: data.manualOverrideDays,
     })
     .eq('id', id);

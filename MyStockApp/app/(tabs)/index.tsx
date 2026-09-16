@@ -149,6 +149,9 @@ export default function ProductsScreen() {
                 {item.category ? `${item.category}  ·  ` : ''}
                 {item.unit ?? 'no unit'}
                 {item.price != null ? `  ·  ${item.price.toFixed(2)} €` : ''}
+                {item.price != null && item.unitsPerPack != null && item.unitsPerPack > 1
+                  ? `  (${(item.price / item.unitsPerPack).toFixed(2)} €/${item.unit ?? 'unit'})`
+                  : ''}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />

@@ -14,6 +14,7 @@ export interface ProductRow {
   photo_url: string | null;
   is_essential: boolean;
   category: string | null;
+  units_per_pack: number | null;
   average_days_between_restocks: number | null;
   manual_override_days: number | null;
   created_at: string;
@@ -39,6 +40,7 @@ export function rowToProduct(row: ProductRow): Product {
     photoUrl: row.photo_url,
     isEssential: row.is_essential,
     category: row.category,
+    unitsPerPack: row.units_per_pack,
     averageDaysBetweenRestocks: row.average_days_between_restocks,
     manualOverrideDays: row.manual_override_days,
     createdAt: row.created_at,

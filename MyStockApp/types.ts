@@ -21,6 +21,7 @@ export interface Product {
   photoUrl: string | null;
   isEssential: boolean;         // pinned to the top of Products/Storage, marked with a star
   category: string | null;      // free-text, user-defined (e.g. "dairy", "cleaning")
+  unitsPerPack: number | null;  // e.g. 24 rolls per toilet paper pack -- lets price-per-unit be shown
   averageDaysBetweenRestocks: number | null;
   manualOverrideDays: number | null;
   createdAt: string;            // ISO 8601

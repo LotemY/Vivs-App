@@ -34,6 +34,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   const [unit, setUnit] = useState(initial?.unit ?? '');
   const [essential, setEssential] = useState(initial?.isEssential ?? false);
   const [category, setCategory] = useState(initial?.category ?? '');
+  const [unitsPerPack, setUnitsPerPack] = useState(initial?.unitsPerPack?.toString() ?? '');
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
   const [rateAmount, setRateAmount] = useState('');
   const [rateDays, setRateDays] = useState('');
@@ -134,6 +135,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
         unit: unit.trim() || null,
         isEssential: essential,
         category: category.trim() || null,
+        unitsPerPack: unitsPerPack.trim() ? Number(unitsPerPack) : null,
         photoUrl: finalPhotoUrl,
         manualOverrideDays: initial?.manualOverrideDays ?? null,
       };
@@ -164,6 +166,13 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   const categorySuggestions = existingCategories.filter(
     (c) => c.toLowerCase() !== category.trim().toLowerCase()
   );
+
+  const priceNum = price.trim() ? Number(price) : null;
+  const unitsPerPackNum = unitsPerPack.trim() ? Number(unitsPerPack) : null;
+  const pricePerUnit =
+    priceNum != null && unitsPerPackNum != null && unitsPerPackNum > 1
+      ? priceNum / unitsPerPackNum
+      : null;
 
   return (
     <View style={styles.container}>
@@ -228,6 +237,17 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
         />
       </Field>
 
+      <Field colors={colors} label="Units per pack (optional)">
+        <TextInput
+          style={styles.input}
+          value={unitsPerPack}
+          onChangeText={setUnitsPerPack}
+          placeholder="e.g. 24 -- leave blank if it's just 1"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="number-pad"
+        />
+      </Field>
+
       <Field colors={colors} label="Price">
         <View style={styles.priceInputWrap}>
           <TextInput
@@ -240,6 +260,11 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
           />
           <Text style={styles.currencyPrefix}>€</Text>
         </View>
+        {pricePerUnit != null && (
+          <Text style={styles.pricePerUnitText}>
+            {pricePerUnit.toFixed(2)} € per {unit.trim() || 'unit'}
+          </Text>
+        )}
       </Field>
 
       {mode === 'create' ? (
@@ -396,6 +421,7 @@ function makeStyles(colors: ThemeColors) {
       fontSize: 16,
       color: colors.textPrimary,
     },
+    pricePerUnitText: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
     error: { color: colors.danger, marginBottom: 12 },
     sectionLabel: {
       fontSize: 15,
