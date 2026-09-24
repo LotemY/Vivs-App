@@ -105,7 +105,7 @@ export async function scheduleRunningLowNotification(product: Product): Promise<
     const updatedAt = new Date(product.quantityUpdatedAt);
     const runOutDate = new Date(updatedAt.getTime() + totalDurationDays * 24 * 60 * 60 * 1000);
     const notifyDate = new Date(runOutDate.getTime() - NOTIFY_BUFFER_DAYS * 24 * 60 * 60 * 1000);
-
+    console.log(`[notif] ${product.name}: rate=${ratePerDay}/day, runOut=${runOutDate}, notifyDate=${notifyDate}, now=${new Date()}`);
     if (notifyDate.getTime() <= Date.now()) {
       // Already within (or past) the buffer window -- nothing to schedule
       // for the future. The app's own "out soon" display already covers this.
