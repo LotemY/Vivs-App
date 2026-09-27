@@ -1,13 +1,23 @@
 // app/(tabs)/storage.tsx
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Image, ScrollView } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, Image, ScrollView, Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { listProducts, getProduct, applyShoppingChanges, listAllRestockLogs } from '../../database/productRepository';
+import {
+  listProducts,
+  getProduct,
+  applyShoppingChanges,
+  listAllRestockLogs,
+  listCategoryColors,
+  setCategoryColor,
+  archiveProduct,
+} from '../../database/productRepository';
 import { getEffectiveQuantity, getDaysRemaining, getConsumptionRatePerDay } from '../../database/consumption';
 import { computeAverageRestockDays } from '../../database/restockStats';
-import { scheduleRunningLowNotification } from '../../database/notifications';
+import { scheduleRunningLowNotification, cancelNotificationForProduct } from '../../database/notifications';
 import { useTheme } from '../../theme/ThemeContext';
+import { PhotoViewer } from '../../components/PhotoViewer';
+import { CategoryColorPicker } from '../../components/CategoryColorPicker';
 import type { ThemeColors } from '../../theme/colors';
 import type { Product, RestockLogEntry } from '../../types';
 
@@ -22,27 +32,42 @@ export default function StorageScreen() {
   const styles = makeStyles(colors);
   const [products, setProducts] = useState<Product[]>([]);
   const [avgRestockDays, setAvgRestockDays] = useState<Record<number, number | null>>({});
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // null = "All"
   // null = not in shopping mode. Present = { [productId]: SessionEntry }
   const [session, setSession] = useState<Record<number, SessionEntry> | null>(null);
 
+  // #5: full-size photo viewer state
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  // #3: category color picker state -- long-press a pill to open this
+  const [pickingColorFor, setPickingColorFor] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
-    const [data, allLogs] = await Promise.all([listProducts(), listAllRestockLogs()]);
+    const [data, allLogs, colorMap] = await Promise.all([
+      listProducts(),
+      listAllRestockLogs(),
+      listCategoryColors(),
+    ]);
+
+    // Storage only ever shows tracked products -- archived ones still live
+    // in the full catalog (Products tab), just not here or in shopping mode.
+    const tracked = data.filter((p) => p.inStorage);
 
     const logsByProduct: Record<number, RestockLogEntry[]> = {};
     for (const log of allLogs) {
       (logsByProduct[log.productId] ??= []).push(log);
     }
     const averages: Record<number, number | null> = {};
-    for (const p of data) {
+    for (const p of tracked) {
       averages[p.id] = computeAverageRestockDays(logsByProduct[p.id] ?? []);
     }
 
-    setProducts(data);
+    setProducts(tracked);
     setAvgRestockDays(averages);
+    setCategoryColors(colorMap);
     setLoading(false);
   }, []);
 
@@ -87,12 +112,50 @@ export default function StorageScreen() {
   }
 
   function adjust(id: number, delta: number) {
+    // Pressing "-" while already at 0 doesn't try to go negative -- it
+    // means "I'm out," so offer to archive it out of Storage instead.
+    if (delta < 0) {
+      const entry = session?.[id];
+      if (entry && entry.current === 0) {
+        const product = products.find((p) => p.id === id);
+        if (product) confirmArchive(product);
+        return;
+      }
+    }
     setSession((prev) => {
       if (!prev) return prev;
       const entry = prev[id];
       const next = Math.max(0, entry.current + delta);
       return { ...prev, [id]: { ...entry, current: next } };
     });
+  }
+
+  function confirmArchive(product: Product) {
+    Alert.alert(
+      'Out of stock',
+      `"${product.name}" is at 0. Move it out of Storage until you buy it again? It stays in Products, and opening Edit on it later brings it back automatically.`,
+      [
+        { text: 'Not yet', style: 'cancel' },
+        { text: 'Archive', style: 'destructive', onPress: () => doArchive(product.id) },
+      ]
+    );
+  }
+
+  async function doArchive(id: number) {
+    try {
+      await archiveProduct(id);
+      cancelNotificationForProduct(id); // best-effort, not awaited -- no longer tracked
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      setSession((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to archive product:', err);
+      Alert.alert("Couldn't archive", 'Check your connection and try again.');
+    }
   }
 
   function discard() {
@@ -139,6 +202,24 @@ export default function StorageScreen() {
     }
   }
 
+  // #3: called when a color swatch is tapped for whichever category is
+  // currently being edited (set by long-pressing its pill below).
+  async function handlePickColor(color: string) {
+    if (!pickingColorFor) return;
+    const category = pickingColorFor;
+    try {
+      await setCategoryColor(category, color);
+      setCategoryColors((prev) => ({ ...prev, [category]: color }));
+      setPickingColorFor(null);
+    } catch (err) {
+      // Previously failed silently -- if this fires, the category_colors
+      // table's Row Level Security is most likely blocking the write; check
+      // its policies in Supabase against the products table's.
+      console.error('Failed to save category color:', err);
+      Alert.alert("Couldn't save color", 'Check that category_colors has the same access policy as your other tables in Supabase.');
+    }
+  }
+
   const shopping = session != null;
 
   return (
@@ -162,9 +243,16 @@ export default function StorageScreen() {
               label={c}
               active={categoryFilter === c}
               onPress={() => setCategoryFilter(c)}
+              onLongPress={() => setPickingColorFor(c)}
+              pillColor={categoryColors[c]}
               colors={colors}
             />
           ))}
+          {/* Explicit trailing spacer -- guarantees breathing room after the
+              last pill even if contentContainerStyle padding alone doesn't
+              get honored (a known quirk when combined with `gap` on some
+              RN/Yoga versions). This is what actually fixes the cut-off. */}
+          <View style={styles.filterEndSpacer} />
         </ScrollView>
       )}
 
@@ -197,6 +285,7 @@ export default function StorageScreen() {
           const daysLeft = getDaysRemaining(item);
           const avgDays = avgRestockDays[item.id];
           const ratePerDay = getConsumptionRatePerDay(item);
+          const catColor = item.category ? categoryColors[item.category] : undefined;
 
           const daysLeftText =
             daysLeft == null ? 'no rate set' : daysLeft <= 0 ? 'out soon' : `${daysLeft}d left`;
@@ -205,22 +294,34 @@ export default function StorageScreen() {
 
           return (
             <View style={[styles.row, changed && styles.rowChanged]}>
-              {item.photoUrl ? (
-                <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
-              ) : (
-                <View style={styles.thumbnailPlaceholder}>
-                  <Ionicons name="image-outline" size={18} color={colors.textMuted} />
-                </View>
-              )}
+              {/* #5: tap the thumbnail to view it full-size */}
+              <Pressable onPress={() => item.photoUrl && setViewingPhoto(item.photoUrl)}>
+                {item.photoUrl ? (
+                  <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
+                ) : (
+                  <View style={styles.thumbnailPlaceholder}>
+                    <Ionicons name="image-outline" size={18} color={colors.textMuted} />
+                  </View>
+                )}
+              </Pressable>
               <View style={styles.rowText}>
                 <View style={styles.nameRow}>
                   {item.isEssential && (
                     <Ionicons name="star" size={13} color={colors.accent} style={styles.star} />
                   )}
-                  <Text style={styles.name}>{item.name}</Text>
+                  {/* #6: company + name shown together */}
+                  <Text style={styles.name}>
+                    {item.company ? `${item.company} ` : ''}
+                    {item.name}
+                  </Text>
                 </View>
                 <Text style={styles.sub}>
-                  {item.category ? `${item.category} · ` : ''}
+                  {item.category ? (
+                    <Text style={catColor ? { color: catColor } : undefined}>
+                      {item.category}
+                    </Text>
+                  ) : null}
+                  {item.category ? ' · ' : ''}
                   {daysLeftText}
                   {rateText}
                   {avgText}
@@ -269,6 +370,15 @@ export default function StorageScreen() {
           </Pressable>
         </View>
       )}
+
+      <PhotoViewer uri={viewingPhoto} onClose={() => setViewingPhoto(null)} />
+      <CategoryColorPicker
+        visible={pickingColorFor != null}
+        category={pickingColorFor}
+        onPick={handlePickColor}
+        onClose={() => setPickingColorFor(null)}
+        colors={colors}
+      />
     </View>
   );
 }
@@ -277,20 +387,40 @@ function FilterPill({
   label,
   active,
   onPress,
+  onLongPress,
+  pillColor,
   colors,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
+  pillColor?: string;
   colors: ThemeColors;
 }) {
   const styles = makeStyles(colors);
+  const customStyle = pillColor
+    ? { borderColor: pillColor, backgroundColor: active ? pillColor : undefined }
+    : undefined;
   return (
     <Pressable
-      style={[styles.filterPill, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+      style={[
+        styles.filterPill,
+        active && !pillColor && { backgroundColor: colors.accent, borderColor: colors.accent },
+        customStyle,
+      ]}
       onPress={onPress}
+      onLongPress={onLongPress}
     >
-      <Text style={[styles.filterPillText, active && { color: colors.onAccent }]}>{label}</Text>
+      <Text
+        style={[
+          styles.filterPillText,
+          active && { color: colors.onAccent },
+          pillColor && !active ? { color: pillColor } : undefined,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -298,15 +428,18 @@ function FilterPill({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    filterScroll: { flexGrow: 0 },
+    filterScroll: { flexGrow: 0, height: 49 },
     filterRow: {
       flexDirection: 'row',
       gap: 8,
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: 4,
+      paddingRight: 8, // small base padding; filterEndSpacer below does the real work
     },
+    filterEndSpacer: { width: 24 },
     filterPill: {
+      flexShrink: 0, // never let a pill's own width get squeezed by the row
       paddingHorizontal: 14,
       paddingVertical: 6,
       borderRadius: 14,

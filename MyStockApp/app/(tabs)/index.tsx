@@ -12,10 +12,12 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { listProducts, deleteProduct } from '../../database/productRepository';
+import { listProducts, deleteProduct, listCategoryColors } from '../../database/productRepository';
 import { cancelNotificationForProduct } from '../../database/notifications';
 import { deleteProductPhoto } from '../../database/photoUpload';
+import { getPricePerReference } from '../../database/pricing';
 import { useTheme } from '../../theme/ThemeContext';
+import { PhotoViewer } from '../../components/PhotoViewer';
 import type { ThemeColors } from '../../theme/colors';
 import type { Product } from '../../types';
 
@@ -26,11 +28,16 @@ export default function ProductsScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // null = "All"
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
+
+  // #5: full-size photo viewer state
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await listProducts();
+    const [data, colorMap] = await Promise.all([listProducts(), listCategoryColors()]);
     setProducts(data);
+    setCategoryColors(colorMap);
     setLoading(false);
   }, []);
 
@@ -106,9 +113,15 @@ export default function ProductsScreen() {
               label={c}
               active={categoryFilter === c}
               onPress={() => setCategoryFilter(c)}
+              pillColor={categoryColors[c]}
               colors={colors}
             />
           ))}
+          {/* Explicit trailing spacer -- guarantees breathing room after the
+              last pill even if contentContainerStyle padding alone doesn't
+              get honored (a known quirk when combined with `gap` on some
+              RN/Yoga versions). This is what actually fixes the cut-off. */}
+          <View style={styles.filterEndSpacer} />
         </ScrollView>
       )}
 
@@ -125,43 +138,69 @@ export default function ProductsScreen() {
               : 'No products yet. Tap + to add your first one.'}
           </Text>
         }
-        renderItem={({ item }) => (
-          <Pressable
-            style={styles.row}
-            onPress={() => router.push(`/product/${item.id}`)}
-            onLongPress={() => confirmDelete(item)}
-          >
-            {item.photoUrl ? (
-              <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
-            ) : (
-              <View style={styles.thumbnailPlaceholder}>
-                <Ionicons name="image-outline" size={18} color={colors.textMuted} />
-              </View>
-            )}
-            <View style={styles.rowText}>
-              <View style={styles.nameRow}>
-                {item.isEssential && (
-                  <Ionicons name="star" size={13} color={colors.accent} style={styles.star} />
+        renderItem={({ item }) => {
+          const catColor = item.category ? categoryColors[item.category] : undefined;
+          // #7: normalized price-per-reference (e.g. "1.20 € per 100g")
+          // instead of the old flat price / unitsPerPack division.
+          const pricePerReference = getPricePerReference({
+            price: item.price,
+            unitsPerPack: item.unitsPerPack,
+            packUnitType: item.packUnitType,
+          });
+
+          return (
+            <Pressable
+              style={styles.row}
+              onPress={() => router.push(`/product/${item.id}`)}
+              onLongPress={() => confirmDelete(item)}
+            >
+              {/* #5: tap the thumbnail to view it full-size (long-press still deletes) */}
+              <Pressable onPress={() => item.photoUrl && setViewingPhoto(item.photoUrl)}>
+                {item.photoUrl ? (
+                  <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
+                ) : (
+                  <View style={styles.thumbnailPlaceholder}>
+                    <Ionicons name="image-outline" size={18} color={colors.textMuted} />
+                  </View>
                 )}
-                <Text style={styles.name}>{item.name}</Text>
+              </Pressable>
+              <View style={styles.rowText}>
+                <View style={styles.nameRow}>
+                  {item.isEssential && (
+                    <Ionicons name="star" size={13} color={colors.accent} style={styles.star} />
+                  )}
+                  {/* #6: company + name shown together */}
+                  <Text style={[styles.name, !item.inStorage && styles.nameArchived]}>
+                    {item.company ? `${item.company} ` : ''}
+                    {item.name}
+                  </Text>
+                  {!item.inStorage && (
+                    <Text style={styles.archivedTag}>Archived</Text>
+                  )}
+                </View>
+                <Text style={styles.meta}>
+                  {item.category ? (
+                    <Text style={catColor ? { color: catColor } : undefined}>
+                      {item.category}
+                    </Text>
+                  ) : null}
+                  {item.category ? '  ·  ' : ''}
+                  {item.unit ?? 'no unit'}
+                  {item.price != null ? `  ·  ${item.price.toFixed(2)} €` : ''}
+                  {pricePerReference ? `  (${pricePerReference})` : ''}
+                </Text>
               </View>
-              <Text style={styles.meta}>
-                {item.category ? `${item.category}  ·  ` : ''}
-                {item.unit ?? 'no unit'}
-                {item.price != null ? `  ·  ${item.price.toFixed(2)} €` : ''}
-                {item.price != null && item.unitsPerPack != null && item.unitsPerPack > 1
-                  ? `  (${(item.price / item.unitsPerPack).toFixed(2)} €/${item.unit ?? 'unit'})`
-                  : ''}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-          </Pressable>
-        )}
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+            </Pressable>
+          );
+        }}
       />
 
       <Pressable style={styles.fab} onPress={() => router.push('/product/new')}>
         <Ionicons name="add" size={28} color={colors.onAccent} />
       </Pressable>
+
+      <PhotoViewer uri={viewingPhoto} onClose={() => setViewingPhoto(null)} />
     </View>
   );
 }
@@ -170,20 +209,37 @@ function FilterPill({
   label,
   active,
   onPress,
+  pillColor,
   colors,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  pillColor?: string;
   colors: ThemeColors;
 }) {
   const styles = makeStyles(colors);
+  const customStyle = pillColor
+    ? { borderColor: pillColor, backgroundColor: active ? pillColor : undefined }
+    : undefined;
   return (
     <Pressable
-      style={[styles.filterPill, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+      style={[
+        styles.filterPill,
+        active && !pillColor && { backgroundColor: colors.accent, borderColor: colors.accent },
+        customStyle,
+      ]}
       onPress={onPress}
     >
-      <Text style={[styles.filterPillText, active && { color: colors.onAccent }]}>{label}</Text>
+      <Text
+        style={[
+          styles.filterPillText,
+          active && { color: colors.onAccent },
+          pillColor && !active ? { color: pillColor } : undefined,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -191,15 +247,18 @@ function FilterPill({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    filterScroll: { flexGrow: 0 },
+    filterScroll: { flexGrow: 0, height: 49 },
     filterRow: {
       flexDirection: 'row',
       gap: 8,
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: 6,
+      paddingRight: 8, // small base padding; filterEndSpacer below does the real work
     },
+    filterEndSpacer: { width: 24 },
     filterPill: {
+      flexShrink: 0, // never let a pill's own width get squeezed by the row
       paddingHorizontal: 14,
       paddingVertical: 6,
       borderRadius: 14,
@@ -232,6 +291,19 @@ function makeStyles(colors: ThemeColors) {
       justifyContent: 'center',
     },
     name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    nameArchived: { color: colors.textMuted },
+    archivedTag: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.textMuted,
+      marginLeft: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      textTransform: 'uppercase',
+    },
     meta: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
     fab: {
       position: 'absolute',

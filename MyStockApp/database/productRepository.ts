@@ -35,16 +35,19 @@ export async function createProduct(data: NewProduct): Promise<number> {
     .from('products')
     .insert({
       name: data.name,
+      company: data.company,
       price: data.price,
       unit: data.unit,
       quantity: 0, // set later via Storage's shopping mode, not the form
-      consumption_rate_amount: data.consumptionRateAmount,
-      consumption_rate_days: data.consumptionRateDays,
+      consumption_rate_amount: null, // never set at creation anymore -- picked up organically
+      consumption_rate_days: null,   // from the first real shopping-mode correction
       photo_url: data.photoUrl,
       is_essential: data.isEssential,
       category: data.category,
       units_per_pack: data.unitsPerPack,
+      pack_unit_type: data.packUnitType,
       manual_override_days: data.manualOverrideDays,
+      in_storage: true, // every new product starts tracked in Storage
     })
     .select('id')
     .single();
@@ -58,21 +61,37 @@ export async function updateProduct(id: number, data: ProductUpdate): Promise<vo
     .from('products')
     .update({
       name: data.name,
+      company: data.company,
       price: data.price,
       unit: data.unit,
       // quantity / quantity_updated_at / consumption_rate_* are all
       // intentionally omitted. Editing a product's details (price, name,
       // unit) must never touch stock levels, the decay clock, or the
       // consumption rate -- those are only ever set by a real
-      // shopping-mode correction. See ProductUpdate's doc comment.
+      // shopping-mode correction.
       photo_url: data.photoUrl,
       is_essential: data.isEssential,
       category: data.category,
       units_per_pack: data.unitsPerPack,
+      pack_unit_type: data.packUnitType,
       manual_override_days: data.manualOverrideDays,
+      // Saving an edit always un-archives -- if you're back in here
+      // touching a product's details, you're using it again. No separate
+      // "bring it back" button needed.
+      in_storage: true,
     })
     .eq('id', id);
 
+  if (error) throw error;
+}
+
+/**
+ * Archives a product out of Storage/shopping mode without deleting it --
+ * it stays in Products (the full catalog) and its history is untouched.
+ * Triggered from Storage by pressing "-" while a product is already at 0.
+ */
+export async function archiveProduct(id: number): Promise<void> {
+  const { error } = await supabase.from('products').update({ in_storage: false }).eq('id', id);
   if (error) throw error;
 }
 
@@ -163,6 +182,26 @@ export async function listCategories(): Promise<string[]> {
 }
 
 /**
+ * Distinct companies already in use across all products, alphabetically --
+ * same "remembers what you typed before" behavior as listCategories(),
+ * powers the suggestion chips under the Company field.
+ */
+export async function listCompanies(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('company')
+    .not('company', 'is', null);
+
+  if (error) throw error;
+
+  const unique = new Set<string>();
+  for (const row of data as { company: string | null }[]) {
+    if (row.company) unique.add(row.company);
+  }
+  return Array.from(unique).sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * All restock_log rows for every product in one query, so Storage can
  * compute each product's average/median restock cycle without firing
  * one request per row.
@@ -175,4 +214,27 @@ export async function listAllRestockLogs(): Promise<RestockLogEntry[]> {
 
   if (error) throw error;
   return (data as RestockLogRow[]).map(rowToRestockLogEntry);
+}
+
+/**
+ * The color assigned to each category, keyed by category name.
+ * Backs the long-press "set a color for this category" feature -- once
+ * set, that color is used for the category's text everywhere it shows up.
+ */
+export async function listCategoryColors(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from('category_colors').select('*');
+  if (error) throw error;
+
+  const map: Record<string, string> = {};
+  for (const row of data as { category: string; color: string }[]) {
+    map[row.category] = row.color;
+  }
+  return map;
+}
+
+export async function setCategoryColor(category: string, color: string): Promise<void> {
+  const { error } = await supabase
+    .from('category_colors')
+    .upsert({ category, color }, { onConflict: 'category' });
+  if (error) throw error;
 }

@@ -5,6 +5,7 @@ import type { Product, RestockLogEntry } from '../types';
 export interface ProductRow {
   id: number;
   name: string;
+  company: string | null;
   price: number | null;
   unit: string | null;
   quantity: number | null;
@@ -15,9 +16,11 @@ export interface ProductRow {
   is_essential: boolean;
   category: string | null;
   units_per_pack: number | null;
+  pack_unit_type: 'item' | 'g' | 'ml' | 'kg' | 'l' | null;
   average_days_between_restocks: number | null;
   manual_override_days: number | null;
   created_at: string;
+  in_storage: boolean;
 }
 
 export interface RestockLogRow {
@@ -31,6 +34,7 @@ export function rowToProduct(row: ProductRow): Product {
   return {
     id: row.id,
     name: row.name,
+    company: row.company,
     price: row.price,
     unit: row.unit,
     quantity: row.quantity,
@@ -41,9 +45,11 @@ export function rowToProduct(row: ProductRow): Product {
     isEssential: row.is_essential,
     category: row.category,
     unitsPerPack: row.units_per_pack,
+    packUnitType: row.pack_unit_type,
     averageDaysBetweenRestocks: row.average_days_between_restocks,
     manualOverrideDays: row.manual_override_days,
     createdAt: row.created_at,
+    inStorage: row.in_storage,
   };
 }
 

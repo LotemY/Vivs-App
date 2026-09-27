@@ -5,8 +5,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import type { NewProduct, ProductUpdate, Product } from '../types';
 import { uploadProductPhoto, deleteProductPhoto } from '../database/photoUpload';
-import { listCategories } from '../database/productRepository';
+import { listCategories, listCompanies } from '../database/productRepository';
+import { getPricePerReference } from '../database/pricing';
 import { useTheme } from '../theme/ThemeContext';
+import { PhotoOptionsSheet } from './PhotoOptionsSheet';
 import type { ThemeColors } from '../theme/colors';
 
 type Props =
@@ -25,19 +27,24 @@ type Props =
       onCancel?: () => void;
     };
 
+const PACK_UNIT_TYPES = ['item', 'g', 'ml', 'kg', 'l'] as const;
+
 export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: Props) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
+  const [company, setCompany] = useState(initial?.company ?? ''); // #6
   const [name, setName] = useState(initial?.name ?? '');
   const [price, setPrice] = useState(initial?.price?.toString() ?? '');
   const [unit, setUnit] = useState(initial?.unit ?? '');
   const [essential, setEssential] = useState(initial?.isEssential ?? false);
   const [category, setCategory] = useState(initial?.category ?? '');
   const [unitsPerPack, setUnitsPerPack] = useState(initial?.unitsPerPack?.toString() ?? '');
+  const [packUnitType, setPackUnitType] = useState<Product['packUnitType']>(
+    initial?.packUnitType ?? null
+  ); // #7
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
-  const [rateAmount, setRateAmount] = useState('');
-  const [rateDays, setRateDays] = useState('');
+  const [existingCompanies, setExistingCompanies] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -46,6 +53,9 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   // Neither set = keep whatever initial?.photoUrl already is, untouched.
   const [pickedUri, setPickedUri] = useState<string | null>(null);
   const [removed, setRemoved] = useState(false);
+  // Custom sheet replacing Alert.alert -- has an explicit X close button so
+  // an accidental tap on the thumbnail can always be backed out of safely.
+  const [photoSheetOpen, setPhotoSheetOpen] = useState(false);
 
   const displayedPhotoUri = removed ? null : pickedUri ?? initial?.photoUrl ?? null;
 
@@ -53,6 +63,9 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     listCategories()
       .then(setExistingCategories)
       .catch(() => {}); // non-critical -- suggestions just won't show if this fails
+    listCompanies()
+      .then(setExistingCompanies)
+      .catch(() => {});
   }, []);
 
   async function pickFromLibrary() {
@@ -64,7 +77,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsEditing: true,
-      aspect: [1, 1],
+      aspect: [16, 9], // #5: was [1, 1]
       quality: 0.7,
     });
     if (!result.canceled) {
@@ -81,7 +94,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     }
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
-      aspect: [1, 1],
+      aspect: [16, 9], // #5: was [1, 1]
       quality: 0.7,
     });
     if (!result.canceled) {
@@ -90,23 +103,9 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     }
   }
 
-  function showPhotoOptions() {
-    const options: { text: string; onPress?: () => void; style?: 'destructive' | 'cancel' }[] = [
-      { text: 'Take Photo', onPress: takePhoto },
-      { text: 'Choose from Library', onPress: pickFromLibrary },
-    ];
-    if (displayedPhotoUri) {
-      options.push({
-        text: 'Remove Photo',
-        style: 'destructive',
-        onPress: () => {
-          setPickedUri(null);
-          setRemoved(true);
-        },
-      });
-    }
-    options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Product photo', undefined, options);
+  function removePhoto() {
+    setPickedUri(null);
+    setRemoved(true);
   }
 
   async function handleSubmit() {
@@ -129,26 +128,24 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
         oldPhotoToDelete = initial?.photoUrl ?? null;
       }
 
-      const base = {
+      // #4: consumption rate is no longer collected here at all -- every
+      // product starts with none and picks one up automatically after its
+      // first real shopping-mode usage correction. Same payload shape now
+      // works for both create and edit.
+      const payload = {
         name: name.trim(),
+        company: company.trim() || null,
         price: price.trim() ? Number(price) : null,
         unit: unit.trim() || null,
         isEssential: essential,
         category: category.trim() || null,
         unitsPerPack: unitsPerPack.trim() ? Number(unitsPerPack) : null,
+        packUnitType,
         photoUrl: finalPhotoUrl,
         manualOverrideDays: initial?.manualOverrideDays ?? null,
       };
 
-      if (mode === 'create') {
-        await onSubmit({
-          ...base,
-          consumptionRateAmount: rateAmount.trim() ? Number(rateAmount) : null,
-          consumptionRateDays: rateDays.trim() ? Number(rateDays) : null,
-        });
-      } else {
-        await onSubmit(base);
-      }
+      await onSubmit(payload);
 
       if (oldPhotoToDelete) {
         deleteProductPhoto(oldPhotoToDelete); // best-effort, not awaited
@@ -166,17 +163,23 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   const categorySuggestions = existingCategories.filter(
     (c) => c.toLowerCase() !== category.trim().toLowerCase()
   );
+  const companySuggestions = existingCompanies.filter(
+    (c) => c.toLowerCase() !== company.trim().toLowerCase()
+  );
 
   const priceNum = price.trim() ? Number(price) : null;
   const unitsPerPackNum = unitsPerPack.trim() ? Number(unitsPerPack) : null;
-  const pricePerUnit =
-    priceNum != null && unitsPerPackNum != null && unitsPerPackNum > 1
-      ? priceNum / unitsPerPackNum
-      : null;
+  // #7: normalized price-per-reference (e.g. "1.20 € per 100g"), replacing
+  // the old flat price/unitsPerPack division.
+  const pricePerReference = getPricePerReference({
+    price: priceNum,
+    unitsPerPack: unitsPerPackNum,
+    packUnitType,
+  });
 
   return (
     <View style={styles.container}>
-      <Pressable style={styles.photoPicker} onPress={showPhotoOptions}>
+      <Pressable style={styles.photoPicker} onPress={() => setPhotoSheetOpen(true)}>
         {displayedPhotoUri ? (
           <Image source={{ uri: displayedPhotoUri }} style={styles.photoPreview} />
         ) : (
@@ -187,12 +190,43 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
         )}
       </Pressable>
 
+      <PhotoOptionsSheet
+        visible={photoSheetOpen}
+        hasPhoto={displayedPhotoUri != null}
+        onTakePhoto={takePhoto}
+        onChooseFromLibrary={pickFromLibrary}
+        onRemovePhoto={removePhoto}
+        onClose={() => setPhotoSheetOpen(false)}
+        colors={colors}
+      />
+
+      {/* #6: company split from name -- same "remembers what you typed
+          before" chip suggestions as Category, below */}
+      <Field colors={colors} label="Company (optional)">
+        <TextInput
+          style={styles.input}
+          value={company}
+          onChangeText={setCompany}
+          placeholder="e.g. G&G"
+          placeholderTextColor={colors.textMuted}
+        />
+        {companySuggestions.length > 0 && (
+          <View style={styles.chipRow}>
+            {companySuggestions.map((c) => (
+              <Pressable key={c} style={styles.chip} onPress={() => setCompany(c)}>
+                <Text style={styles.chipText}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </Field>
+
       <Field colors={colors} label="Name">
         <TextInput
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder="e.g. Paper towels"
+          placeholder="e.g. Vollmilch"
           placeholderTextColor={colors.textMuted}
           autoFocus={!initial}
         />
@@ -242,10 +276,25 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
           style={styles.input}
           value={unitsPerPack}
           onChangeText={setUnitsPerPack}
-          placeholder="e.g. 24 -- leave blank if it's just 1"
+          placeholder="e.g. 500"
           placeholderTextColor={colors.textMuted}
           keyboardType="number-pad"
         />
+        {/* #7: unit-type selector driving the price-per-reference calculation */}
+        <View style={styles.chipRow}>
+          {PACK_UNIT_TYPES.map((u) => {
+            const active = packUnitType === u;
+            return (
+              <Pressable
+                key={u}
+                style={[styles.chip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                onPress={() => setPackUnitType(u)}
+              >
+                <Text style={[styles.chipText, active && { color: colors.onAccent }]}>{u}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </Field>
 
       <Field colors={colors} label="Price">
@@ -260,43 +309,10 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
           />
           <Text style={styles.currencyPrefix}>€</Text>
         </View>
-        {pricePerUnit != null && (
-          <Text style={styles.pricePerUnitText}>
-            {pricePerUnit.toFixed(2)} € per {unit.trim() || 'unit'}
-          </Text>
+        {pricePerReference && (
+          <Text style={styles.pricePerUnitText}>{pricePerReference}</Text>
         )}
       </Field>
-
-      {mode === 'create' ? (
-        <>
-          <Text style={styles.sectionLabel}>Consumption rate (optional)</Text>
-          <View style={styles.rateRow}>
-            <View style={styles.rateField}>
-              <Text style={styles.label}>Uses</Text>
-              <TextInput
-                style={styles.input}
-                value={rateAmount}
-                onChangeText={setRateAmount}
-                placeholder="e.g. 3"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <Text style={styles.rateConnector}>every</Text>
-            <View style={styles.rateField}>
-              <Text style={styles.label}>days</Text>
-              <TextInput
-                style={styles.input}
-                value={rateDays}
-                onChangeText={setRateDays}
-                placeholder="e.g. 1"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="number-pad"
-              />
-            </View>
-          </View>
-        </>
-      ) : null}
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -352,12 +368,12 @@ function makeStyles(colors: ThemeColors) {
       marginBottom: 20,
     },
     photoPreview: {
-      width: 100,
+      width: 178, // 16:9 preview -- was 100x100 square
       height: 100,
       borderRadius: 12,
     },
     photoPlaceholder: {
-      width: 100,
+      width: 178,
       height: 100,
       borderRadius: 12,
       borderWidth: StyleSheet.hairlineWidth,
@@ -423,17 +439,6 @@ function makeStyles(colors: ThemeColors) {
     },
     pricePerUnitText: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
     error: { color: colors.danger, marginBottom: 12 },
-    sectionLabel: {
-      fontSize: 15,
-      fontWeight: '600',
-      marginTop: 4,
-      marginBottom: 4,
-      color: colors.textPrimary,
-    },
-    sectionHint: { fontSize: 12, color: colors.textMuted, marginBottom: 12, lineHeight: 17 },
-    rateRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16, gap: 8 },
-    rateField: { flex: 1 },
-    rateConnector: { color: colors.textMuted, marginBottom: 12, paddingHorizontal: 2 },
     actionRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
     actionButton: { flex: 1 },
     button: {
