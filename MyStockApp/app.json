@@ -1,5 +1,6 @@
 {
   "expo": {
+    "icon": "./assets/icon.png",
     "name": "MyStockApp",
     "slug": "MyStockApp",
     "version": "1.0.0",
@@ -10,9 +11,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#CFFFF9"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.MyStockApp"
