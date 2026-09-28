@@ -77,7 +77,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsEditing: true,
-      aspect: [16, 9], // #5: was [1, 1]
+      aspect: [9, 16], // #5: was [1, 1], then [16, 9] -- vertical, not landscape
       quality: 0.7,
     });
     if (!result.canceled) {
@@ -94,7 +94,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     }
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
-      aspect: [16, 9], // #5: was [1, 1]
+      aspect: [9, 16], // #5: was [1, 1], then [16, 9] -- vertical, not landscape
       quality: 0.7,
     });
     if (!result.canceled) {
@@ -368,13 +368,13 @@ function makeStyles(colors: ThemeColors) {
       marginBottom: 20,
     },
     photoPreview: {
-      width: 178, // 16:9 preview -- was 100x100 square
-      height: 100,
+      width: 100, // 9:16 preview -- was 100x100 square, then 178x100 (landscape by mistake)
+      height: 178,
       borderRadius: 12,
     },
     photoPlaceholder: {
-      width: 178,
-      height: 100,
+      width: 100,
+      height: 178,
       borderRadius: 12,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
