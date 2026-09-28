@@ -1,41 +1,45 @@
 // components/CategoryColorPicker.tsx
-import { useMemo, useState } from 'react';
-import { Modal, View, Text, Pressable, TextInput, ScrollView, StyleSheet } from 'react-native';
+//
+// Real saturation/lightness gradient box + hue slider, like a design-tool
+// color picker. Needs the `expo-linear-gradient` package (a small native
+// module) -- run `npx expo install expo-linear-gradient` once, then rebuild
+// with `eas build` for it to work. Everything else here is plain RN
+// (PanResponder for the drag gestures), no other new dependencies.
+import { useMemo, useRef, useState } from 'react';
+import { Modal, View, Text, Pressable, TextInput, StyleSheet, PanResponder } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { ThemeColors } from '../theme/colors';
 
-// A generated palette + free-hex input rather than a color-wheel library,
-// deliberately -- a real wheel-picker package needs native code and a fresh
-// EAS build. This is pure JS/RN math (HSL -> hex), works immediately on the
-// dev client with no rebuild, and covers effectively unlimited colors via
-// the hex field below the grid.
-function hslToHex(h: number, s: number, l: number): string {
-  s /= 100;
-  l /= 100;
-  const k = (n: number) => (n + h / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-  const toHex = (x: number) =>
-    Math.round(x * 255)
+function hsvToHex(h: number, s: number, v: number): string {
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const toHex = (n: number) =>
+    Math.round((n + m) * 255)
       .toString(16)
       .padStart(2, '0');
-  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
-
-// 12 hues around the wheel x 3 shades (bright / mid / deep) = 36 swatches,
-// plus grayscale, all generated -- this is what makes it feel like a wheel
-// rather than a fixed, small palette.
-const HUES = Array.from({ length: 12 }, (_, i) => i * 30);
-const SHADES: { s: number; l: number }[] = [
-  { s: 85, l: 60 }, // bright
-  { s: 75, l: 45 }, // mid
-  { s: 70, l: 30 }, // deep
-];
-const WHEEL = SHADES.flatMap((shade) => HUES.map((h) => hslToHex(h, shade.s, shade.l)));
-const GRAYSCALE = ['#95a5a6', '#7f8c8d', '#636e72', '#2d3436', '#dfe6e9'];
 
 function isValidHex(v: string): boolean {
   return /^#([0-9a-f]{6})$/i.test(v);
 }
+
+const BOX_SIZE = 260;
+const THUMB = 20;
+const SLIDER_HEIGHT = 28;
+const SLIDER_THUMB_W = 12;
+const HUE_STOPS = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#ff0000'];
+const NEUTRALS = ['#ffffff', '#d8d8d8', '#9aa0a6', '#5c5f66', '#2b2d31', '#000000'];
 
 export function CategoryColorPicker({
   visible,
@@ -50,15 +54,59 @@ export function CategoryColorPicker({
   onClose: () => void;
   colors: ThemeColors;
 }) {
+  const [hue, setHue] = useState(210); // starting hue -- a blue
+  const [pos, setPos] = useState({ x: 0.65, y: 0.3 }); // x = saturation, y = 1-value
   const [hexInput, setHexInput] = useState('');
 
-  // Reset the hex field each time a fresh category is opened, not on every render.
+  // Reset when a fresh category is opened, not on every render.
   const key = category ?? '';
   const [lastKey, setLastKey] = useState(key);
   if (key !== lastKey) {
     setLastKey(key);
     setHexInput('');
+    setHue(210);
+    setPos({ x: 0.65, y: 0.3 });
   }
+
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+  const boxPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => {
+        setPos({
+          x: clamp01(e.nativeEvent.locationX / BOX_SIZE),
+          y: clamp01(e.nativeEvent.locationY / BOX_SIZE),
+        });
+      },
+      onPanResponderMove: (e) => {
+        setPos({
+          x: clamp01(e.nativeEvent.locationX / BOX_SIZE),
+          y: clamp01(e.nativeEvent.locationY / BOX_SIZE),
+        });
+      },
+    })
+  ).current;
+
+  const sliderPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => {
+        setHue(clamp01(e.nativeEvent.locationX / BOX_SIZE) * 359.9);
+      },
+      onPanResponderMove: (e) => {
+        setHue(clamp01(e.nativeEvent.locationX / BOX_SIZE) * 359.9);
+      },
+    })
+  ).current;
+
+  const pureHueColor = useMemo(() => hsvToHex(hue, 1, 1), [hue]);
+  const pickedColor = useMemo(
+    () => hsvToHex(hue, pos.x, 1 - pos.y),
+    [hue, pos]
+  );
 
   const normalizedHex = hexInput.trim().startsWith('#') ? hexInput.trim() : `#${hexInput.trim()}`;
   const hexValid = useMemo(() => isValidHex(normalizedHex), [normalizedHex]);
@@ -71,27 +119,68 @@ export function CategoryColorPicker({
             Color for "{category}"
           </Text>
 
-          <ScrollView style={styles.scroll}>
-            <View style={styles.grid}>
-              {WHEEL.map((c, i) => (
-                <Pressable
-                  key={`${c}-${i}`}
-                  style={[styles.swatch, { backgroundColor: c }]}
-                  onPress={() => onPick(c)}
-                />
-              ))}
-              {GRAYSCALE.map((c) => (
-                <Pressable
-                  key={c}
-                  style={[styles.swatch, { backgroundColor: c }]}
-                  onPress={() => onPick(c)}
-                />
-              ))}
-            </View>
-          </ScrollView>
+          {/* Saturation (x) / Value (y) box for the current hue */}
+          <View style={styles.box} {...boxPan.panHandlers}>
+            <LinearGradient
+              colors={['#ffffff', pureHueColor]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <LinearGradient
+              colors={['rgba(0,0,0,0)', '#000000']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                styles.boxThumb,
+                { left: pos.x * BOX_SIZE - THUMB / 2, top: pos.y * BOX_SIZE - THUMB / 2 },
+              ]}
+            />
+          </View>
 
-          <Text style={[styles.hexLabel, { color: colors.textSecondary }]}>
-            Or type any hex code:
+          {/* Hue slider */}
+          <View style={styles.sliderWrap} {...sliderPan.panHandlers}>
+            <LinearGradient
+              colors={HUE_STOPS}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View
+              pointerEvents="none"
+              style={[styles.sliderThumb, { left: (hue / 360) * BOX_SIZE - SLIDER_THUMB_W / 2 }]}
+            />
+          </View>
+
+          {/* Preview + commit */}
+          <View style={styles.previewRow}>
+            <View style={[styles.previewSwatch, { backgroundColor: pickedColor }]} />
+            <Text style={[styles.previewHex, { color: colors.textSecondary }]}>{pickedColor}</Text>
+            <Pressable
+              style={[styles.useButton, { backgroundColor: colors.accent }]}
+              onPress={() => onPick(pickedColor)}
+            >
+              <Text style={{ color: colors.onAccent, fontWeight: '600' }}>Use</Text>
+            </Pressable>
+          </View>
+
+          <Text style={[styles.subLabel, { color: colors.textSecondary }]}>Neutrals</Text>
+          <View style={styles.neutralsRow}>
+            {NEUTRALS.map((c) => (
+              <Pressable
+                key={c}
+                style={[styles.neutralSwatch, { backgroundColor: c, borderColor: colors.border }]}
+                onPress={() => onPick(c)}
+              />
+            ))}
+          </View>
+
+          <Text style={[styles.subLabel, { color: colors.textSecondary }]}>
+            Or type any hex code
           </Text>
           <View style={styles.hexRow}>
             <View
@@ -130,11 +219,56 @@ export function CategoryColorPicker({
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: { padding: 20, paddingBottom: 28, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
-  title: { fontSize: 16, fontWeight: '600', marginBottom: 16 },
-  scroll: { maxHeight: 260 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 4 },
-  swatch: { width: 38, height: 38, borderRadius: 19 },
-  hexLabel: { fontSize: 13, marginTop: 16, marginBottom: 8 },
+  title: { fontSize: 16, fontWeight: '600', marginBottom: 16, textAlign: 'center' },
+  box: {
+    width: BOX_SIZE,
+    height: BOX_SIZE,
+    borderRadius: 12,
+    overflow: 'hidden',
+    alignSelf: 'center',
+  },
+  boxThumb: {
+    position: 'absolute',
+    width: THUMB,
+    height: THUMB,
+    borderRadius: THUMB / 2,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  sliderWrap: {
+    width: BOX_SIZE,
+    height: SLIDER_HEIGHT,
+    borderRadius: SLIDER_HEIGHT / 2,
+    overflow: 'hidden',
+    alignSelf: 'center',
+    marginTop: 16,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    top: -4,
+    width: SLIDER_THUMB_W,
+    height: SLIDER_HEIGHT + 8,
+    borderRadius: 6,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+    alignSelf: 'center',
+    width: BOX_SIZE,
+  },
+  previewSwatch: { width: 40, height: 40, borderRadius: 10 },
+  previewHex: { flex: 1, fontSize: 15 },
+  subLabel: { fontSize: 12, marginTop: 18, marginBottom: 8 },
+  neutralsRow: { flexDirection: 'row', gap: 10 },
+  neutralSwatch: { width: 32, height: 32, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
   hexRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   hexPreview: { width: 32, height: 32, borderRadius: 8 },
   hexInput: {

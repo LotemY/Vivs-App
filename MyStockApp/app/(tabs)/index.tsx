@@ -247,7 +247,7 @@ function FilterPill({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    filterScroll: { flexGrow: 0, height: 49 },
+    filterScroll: { flexGrow: 0, height: 48 },
     filterRow: {
       flexDirection: 'row',
       gap: 8,
@@ -260,9 +260,9 @@ function makeStyles(colors: ThemeColors) {
     filterPill: {
       flexShrink: 0, // never let a pill's own width get squeezed by the row
       paddingHorizontal: 14,
-      paddingVertical: 6,
+      paddingVertical: 5,
       borderRadius: 14,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: colors.border,
     },
     filterPillText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
