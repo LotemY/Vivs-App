@@ -77,7 +77,6 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsEditing: true,
-      aspect: [9, 16], // #5: was [1, 1], then [16, 9] -- vertical, not landscape
       quality: 0.7,
     });
     if (!result.canceled) {
@@ -94,7 +93,6 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     }
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
-      aspect: [9, 16], // #5: was [1, 1], then [16, 9] -- vertical, not landscape
       quality: 0.7,
     });
     if (!result.canceled) {

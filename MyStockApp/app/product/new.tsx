@@ -16,10 +16,10 @@ export default function NewProductScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 200 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 150 }}
         keyboardShouldPersistTaps="handled"
       >
         <ProductForm
