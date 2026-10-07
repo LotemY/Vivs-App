@@ -461,7 +461,7 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 8,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: colors.accent,
     },
     shopButtonText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
