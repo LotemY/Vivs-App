@@ -12,7 +12,12 @@ import {
   setCategoryColor,
   archiveProduct,
 } from '../../database/productRepository';
-import { getEffectiveQuantity, getDaysRemaining, getConsumptionRatePerDay } from '../../database/consumption';
+import {
+  getEffectiveQuantity,
+  getDaysRemaining,
+  getConsumptionRatePerDay,
+  isLikelyOut,
+} from '../../database/consumption';
 import { computeAverageRestockDays } from '../../database/restockStats';
 import { scheduleRunningLowNotification, cancelNotificationForProduct } from '../../database/notifications';
 import { useTheme } from '../../theme/ThemeContext';
@@ -286,6 +291,10 @@ export default function StorageScreen() {
           const avgDays = avgRestockDays[item.id];
           const ratePerDay = getConsumptionRatePerDay(item);
           const catColor = item.category ? categoryColors[item.category] : undefined;
+          // Prediction says it's gone, but the saved count says otherwise. Just
+          // a label (not pressable); hidden once you've changed the row this
+          // session, since you're already correcting it.
+          const likelyOut = isLikelyOut(item) && !changed;
 
           const daysLeftText =
             daysLeft == null ? 'no rate set' : daysLeft <= 0 ? 'out soon' : `${daysLeft}d left`;
@@ -315,17 +324,37 @@ export default function StorageScreen() {
                     {item.name}
                   </Text>
                 </View>
-                <Text style={styles.sub}>
-                  {item.category ? (
-                    <Text style={catColor ? { color: catColor } : undefined}>
-                      {item.category}
+                {likelyOut ? (
+                  <View style={styles.subRow}>
+                    <Text style={styles.sub}>
+                      {item.category ? (
+                        <Text style={catColor ? { color: catColor } : undefined}>
+                          {item.category}
+                        </Text>
+                      ) : null}
+                      {item.category ? ' · ' : ''}
                     </Text>
-                  ) : null}
-                  {item.category ? ' · ' : ''}
-                  {daysLeftText}
-                  {rateText}
-                  {avgText}
-                </Text>
+                    <View style={styles.likelyOutBadge}>
+                      <Text style={styles.likelyOutText}>Likely out</Text>
+                    </View>
+                    <Text style={styles.sub}>
+                      {rateText}
+                      {avgText}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.sub}>
+                    {item.category ? (
+                      <Text style={catColor ? { color: catColor } : undefined}>
+                        {item.category}
+                      </Text>
+                    ) : null}
+                    {item.category ? ' · ' : ''}
+                    {daysLeftText}
+                    {rateText}
+                    {avgText}
+                  </Text>
+                )}
               </View>
 
               {shopping ? (
@@ -492,6 +521,16 @@ function makeStyles(colors: ThemeColors) {
     star: { marginRight: 4 },
     name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
     sub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+    subRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 2 },
+    likelyOutBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 1,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#f5a623',
+      backgroundColor: 'rgba(245,166,35,0.15)',
+    },
+    likelyOutText: { fontSize: 11, fontWeight: '700', color: '#f5a623' },
     quantity: {
       fontSize: 17,
       fontWeight: '600',

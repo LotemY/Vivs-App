@@ -1,6 +1,7 @@
 // app/_layout.tsx
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
+import { StartupSound } from '../components/StartupSound';
 import { initNotifications } from '../database/notifications';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 
@@ -12,6 +13,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <ThemedStack />
+      <StartupSound />
     </ThemeProvider>
   );
 }
