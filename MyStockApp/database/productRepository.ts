@@ -7,6 +7,7 @@ import {
   type ProductRow,
   type RestockLogRow,
 } from './mappers';
+import { logEvent } from './eventRepository';
 
 /** List view -- no `db` argument anymore, the Supabase client is a module-level singleton. */
 export async function listProducts(): Promise<Product[]> {
@@ -28,6 +29,11 @@ export async function getProduct(id: number): Promise<Product | null> {
 
   if (error) throw error;
   return data ? rowToProduct(data as ProductRow) : null;
+}
+
+/** "Company Name" the way it's shown everywhere else. */
+function displayName(p: { company: string | null; name: string }): string {
+  return `${p.company ? `${p.company} ` : ''}${p.name}`;
 }
 
 export async function createProduct(data: NewProduct): Promise<number> {
@@ -53,6 +59,7 @@ export async function createProduct(data: NewProduct): Promise<number> {
     .single();
 
   if (error) throw error;
+  logEvent({ type: 'added', productId: row.id, productName: displayName(data) });
   return row.id;
 }
 
@@ -91,14 +98,18 @@ export async function updateProduct(id: number, data: ProductUpdate): Promise<vo
  * Triggered from Storage by pressing "-" while a product is already at 0.
  */
 export async function archiveProduct(id: number): Promise<void> {
+  const product = await getProduct(id);
   const { error } = await supabase.from('products').update({ in_storage: false }).eq('id', id);
   if (error) throw error;
+  if (product) logEvent({ type: 'archived', productId: id, productName: displayName(product) });
 }
 
 export async function deleteProduct(id: number): Promise<void> {
+  const product = await getProduct(id);
   // restock_log rows for this product are removed automatically via ON DELETE CASCADE
   const { error } = await supabase.from('products').delete().eq('id', id);
   if (error) throw error;
+  if (product) logEvent({ type: 'deleted', productId: id, productName: displayName(product) });
 }
 
 /**
@@ -157,6 +168,12 @@ export async function applyShoppingChanges(
           quantity: -consumedAmount,
         });
         if (logError) throw logError;
+        logEvent({
+          type: 'restocked',
+          productId: product.id,
+          productName: displayName(product),
+          quantity: -consumedAmount,
+        });
       }
     })
   );

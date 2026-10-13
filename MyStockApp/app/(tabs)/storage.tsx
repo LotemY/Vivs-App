@@ -254,7 +254,7 @@ export default function StorageScreen() {
         <View style={styles.header}>
           <Pressable style={styles.shopButton} onPress={startShopping}>
             <Ionicons name="cart-outline" size={16} color={colors.accent} />
-            <Text style={styles.shopButtonText}>Go shopping</Text>
+            <Text style={styles.shopButtonText}>Adjust</Text>
           </Pressable>
         </View>
       )}

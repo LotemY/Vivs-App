@@ -32,6 +32,7 @@ function ThemedStack() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="product/new" options={{ title: 'Add Product' }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Edit Product' }} />
+      <Stack.Screen name="history" options={{ title: 'Notifications' }} />
     </Stack>
   );
 }
