@@ -5,7 +5,6 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   listProducts,
-  getProduct,
   applyShoppingChanges,
   listAllRestockLogs,
   listCategoryColors,
@@ -19,7 +18,7 @@ import {
   isLikelyOut,
 } from '../../database/consumption';
 import { computeAverageRestockDays } from '../../database/restockStats';
-import { scheduleRunningLowNotification, cancelNotificationForProduct } from '../../database/notifications';
+import { rescheduleDigest } from '../../database/notifications';
 import { useTheme } from '../../theme/ThemeContext';
 import { PhotoViewer } from '../../components/PhotoViewer';
 import { CategoryColorPicker } from '../../components/CategoryColorPicker';
@@ -71,6 +70,7 @@ export default function StorageScreen() {
     }
 
     setProducts(tracked);
+    rescheduleDigest(tracked); // fire-and-forget: rebuild the daily digest from fresh data
     setAvgRestockDays(averages);
     setCategoryColors(colorMap);
     setLoading(false);
@@ -149,7 +149,7 @@ export default function StorageScreen() {
   async function doArchive(id: number) {
     try {
       await archiveProduct(id);
-      cancelNotificationForProduct(id); // best-effort, not awaited -- no longer tracked
+      rescheduleDigest(products.filter((p) => p.id !== id)); // best-effort, not awaited
       setProducts((prev) => prev.filter((p) => p.id !== id));
       setSession((prev) => {
         if (!prev) return prev;
@@ -189,18 +189,7 @@ export default function StorageScreen() {
       await applyShoppingChanges(changes);
       setSession(null);
 
-      // Reschedule notifications using the freshly-updated rate/quantity/
-      // timestamp for exactly the products that changed -- not the stale
-      // in-memory objects from before the save.
-      const updatedProducts = await Promise.all(
-        changes.map((c) => getProduct(c.product.id))
-      );
-      await Promise.all(
-        updatedProducts
-          .filter((p): p is Product => p != null)
-          .map((p) => scheduleRunningLowNotification(p))
-      );
-
+      // load() below refetches everything and rebuilds the digest.
       await load();
     } finally {
       setSaving(false);

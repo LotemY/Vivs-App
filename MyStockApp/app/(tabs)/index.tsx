@@ -20,6 +20,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { PhotoViewer } from '../../components/PhotoViewer';
 import type { ThemeColors } from '../../theme/colors';
 import type { Product } from '../../types';
+   import { rescheduleDigest } from '../../database/notifications';
 
 export default function ProductsScreen() {
   const router = useRouter();
@@ -37,6 +38,7 @@ export default function ProductsScreen() {
     setLoading(true);
     const [data, colorMap] = await Promise.all([listProducts(), listCategoryColors()]);
     setProducts(data);
+    rescheduleDigest(data);
     setCategoryColors(colorMap);
     setLoading(false);
   }, []);

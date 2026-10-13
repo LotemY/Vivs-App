@@ -1,13 +1,18 @@
 // database/notifications.ts
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Product } from '../types';
 import { getConsumptionRatePerDay } from './consumption';
 
-/** How many days before the predicted run-out date to notify. */
+/** How many days before the predicted run-out date an item counts as "running low". */
 export const NOTIFY_BUFFER_DAYS = 3;
 
-const STORAGE_KEY_PREFIX = 'notif:';
+/** The daily digest goes out at this hour on the PHONE'S OWN clock (so 9:00 wherever the phone is). */
+export const DIGEST_HOUR = 9;
+
+/** How many days ahead to schedule digests. Refreshed every time the app opens or data changes. */
+export const DIGEST_HORIZON_DAYS = 14;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 let handlerConfigured = false;
 
@@ -32,10 +37,6 @@ function loadNotifications(): typeof import('expo-notifications') | null {
     console.warn('expo-notifications unavailable in this environment:', err);
     return null;
   }
-}
-
-function storageKey(productId: number): string {
-  return `${STORAGE_KEY_PREFIX}${productId}`;
 }
 
 /**
@@ -79,76 +80,128 @@ export async function initNotifications(): Promise<void> {
   }
 }
 
+function displayName(p: Product): string {
+  return `${p.company ? `${p.company} ` : ''}${p.name}`;
+}
+
+/** The text of one digest, depending on how many items are in it. */
+function buildDigestContent(names: string[]): { title: string; body: string } {
+  const n = names.length;
+  if (n === 1) {
+    return { title: 'Time to restock?', body: `${names[0]} is running low` };
+  }
+  if (n <= 3) {
+    return { title: `${n} items running low`, body: names.join(', ') };
+  }
+  return {
+    title: `${n} items running low`,
+    body: `${names.slice(0, 3).join(', ')} and ${n - 3} more`,
+  };
+}
+
+/** The next DIGEST_HOUR:00 (phone-local) strictly after `from`. */
+function nextDigestSlot(from: Date): Date {
+  const slot = new Date(from);
+  slot.setHours(DIGEST_HOUR, 0, 0, 0);
+  if (slot.getTime() <= from.getTime()) slot.setDate(slot.getDate() + 1);
+  return slot;
+}
+
 /**
- * (Re)schedules the "running low" notification for one product, based on
- * its current quantity, quantityUpdatedAt, and consumption rate.
- * Cancels any previously scheduled notification for this product first, so
- * this is always safe to call again after any change -- creation, or a
- * shopping-mode correction that shifts the predicted run-out date.
- * No-ops (after cancelling any stale one) if there's no rate configured,
- * no quantity, the predicted notify date has already passed, or
- * notifications aren't available in this environment.
+ * Which digest slot an item belongs in: the last DIGEST_HOUR:00 at or before
+ * the moment it enters its "running low" window (so you get a little MORE
+ * warning, never less). If that slot has already passed but the window
+ * hasn't opened yet, it goes into the next available slot. Items already
+ * inside their window are skipped -- the app's own "Likely out" flag and
+ * days-left text cover those.
  */
-export async function scheduleRunningLowNotification(product: Product): Promise<void> {
+function digestSlotFor(product: Product, now: Date): Date | null {
+  const ratePerDay = getConsumptionRatePerDay(product);
+  if (ratePerDay == null || product.quantity == null || product.quantity <= 0) return null;
+
+  const totalDurationDays = product.quantity / ratePerDay;
+  const runOutMs = new Date(product.quantityUpdatedAt).getTime() + totalDurationDays * DAY_MS;
+  const notifyMs = runOutMs - NOTIFY_BUFFER_DAYS * DAY_MS;
+  if (notifyMs <= now.getTime()) return null;
+
+  const slot = new Date(notifyMs);
+  slot.setHours(DIGEST_HOUR, 0, 0, 0);
+  if (slot.getTime() > notifyMs) slot.setDate(slot.getDate() - 1);
+
+  const finalSlot = slot.getTime() > now.getTime() ? slot : nextDigestSlot(now);
+  if (finalSlot.getTime() - now.getTime() > DIGEST_HORIZON_DAYS * DAY_MS) return null;
+  return finalSlot;
+}
+
+// Two screens can ask for a reschedule at nearly the same moment (e.g. both
+// tabs loading on app open). Running them strictly one after another keeps
+// them from cancelling each other's freshly scheduled notifications.
+let queue: Promise<void> = Promise.resolve();
+
+/**
+ * Rebuilds the whole set of upcoming digest notifications from scratch:
+ * cancels everything scheduled, then schedules one notification per day that
+ * has at least one item newly running low. Safe to call as often as you
+ * like -- on app open, after saving a shopping session, after archiving.
+ * Pass every product; archived ones (inStorage = false) are ignored here.
+ */
+export function rescheduleDigest(products: Product[]): Promise<void> {
+  queue = queue.then(() => runReschedule(products)).catch(() => {});
+  return queue;
+}
+
+async function runReschedule(products: Product[]): Promise<void> {
   const Notifications = loadNotifications();
   if (!Notifications) return;
 
   try {
-    await cancelNotificationForProduct(product.id);
+    // Also clears any per-product notifications scheduled by older builds.
+    await Notifications.cancelAllScheduledNotificationsAsync();
 
-    const ratePerDay = getConsumptionRatePerDay(product);
-    if (ratePerDay == null || product.quantity == null || product.quantity <= 0) {
-      return;
+    const now = new Date();
+    const bySlot = new Map<number, { product: Product; runOutMs: number }[]>();
+
+    for (const product of products) {
+      if (!product.inStorage) continue;
+      const slot = digestSlotFor(product, now);
+      if (!slot) continue;
+
+      const ratePerDay = getConsumptionRatePerDay(product) as number;
+      const runOutMs =
+        new Date(product.quantityUpdatedAt).getTime() +
+        ((product.quantity as number) / ratePerDay) * DAY_MS;
+
+      const key = slot.getTime();
+      const group = bySlot.get(key) ?? [];
+      group.push({ product, runOutMs });
+      bySlot.set(key, group);
     }
 
-    const totalDurationDays = product.quantity / ratePerDay;
-    const updatedAt = new Date(product.quantityUpdatedAt);
-    const runOutDate = new Date(updatedAt.getTime() + totalDurationDays * 24 * 60 * 60 * 1000);
-    const notifyDate = new Date(runOutDate.getTime() - NOTIFY_BUFFER_DAYS * 24 * 60 * 60 * 1000);
-    console.log(`[notif] ${product.name}: rate=${ratePerDay}/day, runOut=${runOutDate}, notifyDate=${notifyDate}, now=${new Date()}`);
-    if (notifyDate.getTime() <= Date.now()) {
-      // Already within (or past) the buffer window -- nothing to schedule
-      // for the future. The app's own "out soon" display already covers this.
-      return;
-    }
+    for (const [slotMs, group] of bySlot) {
+      // Soonest-to-run-out first, so the most urgent names lead the message.
+      group.sort((a, b) => a.runOutMs - b.runOutMs);
+      const { title, body } = buildDigestContent(group.map((g) => displayName(g.product)));
 
-    const identifier = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `${product.name} is running low`,
-        body: `About ${NOTIFY_BUFFER_DAYS} days left at your usual rate — might be time to restock.`,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: notifyDate,
-        channelId: 'default',
-      },
-    });
-
-    await AsyncStorage.setItem(storageKey(product.id), identifier);
-  } catch (err) {
-    console.warn(`Couldn't schedule notification for product ${product.id}:`, err);
-  }
-}
-
-export async function cancelNotificationForProduct(productId: number): Promise<void> {
-  const key = storageKey(productId);
-  const Notifications = loadNotifications();
-
-  if (!Notifications) {
-    // Still clear our local record even if the library itself is unavailable.
-    await AsyncStorage.removeItem(key).catch(() => {});
-    return;
-  }
-
-  try {
-    const identifier = await AsyncStorage.getItem(key);
-    if (identifier) {
-      await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {
-        // Already fired or cancelled -- fine, just clear our record of it.
+      await Notifications.scheduleNotificationAsync({
+        content: { title, body },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: new Date(slotMs),
+          channelId: 'default',
+        },
       });
-      await AsyncStorage.removeItem(key);
     }
   } catch (err) {
-    console.warn(`Couldn't cancel notification for product ${productId}:`, err);
+    console.warn("Couldn't schedule the digest notifications:", err);
   }
 }
+
+/**
+ * Kept only so older imports keep compiling. Per-product notifications no
+ * longer exist -- the digest is rebuilt from scratch by rescheduleDigest(),
+ * which already leaves out anything archived or deleted.
+ */
+export async function cancelNotificationForProduct(_productId: number): Promise<void> {}
+
+/** Kept only so older imports keep compiling; see rescheduleDigest(). */
+export async function scheduleRunningLowNotification(_product: Product): Promise<void> {}
