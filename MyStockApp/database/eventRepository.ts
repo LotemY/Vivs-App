@@ -48,7 +48,7 @@ export async function logEvent(e: {
 }
 
 /** Newest first. */
-export async function listEvents(limit = 100): Promise<AppEvent[]> {
+export async function listEvents(limit = 30): Promise<AppEvent[]> {
   const { data, error } = await supabase
     .from('events')
     .select('*')
