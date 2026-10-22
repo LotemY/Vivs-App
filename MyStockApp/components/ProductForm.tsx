@@ -13,21 +13,21 @@ import type { ThemeColors } from '../theme/colors';
 
 type Props =
   | {
-      mode: 'create';
-      initial?: undefined;
-      onSubmit: (data: NewProduct) => void | Promise<void>;
-      submitLabel: string;
-      onCancel?: () => void;
-    }
+    mode: 'create';
+    initial?: undefined;
+    onSubmit: (data: NewProduct) => void | Promise<void>;
+    submitLabel: string;
+    onCancel?: () => void;
+  }
   | {
-      mode: 'edit';
-      initial: Product;
-      onSubmit: (data: ProductUpdate) => void | Promise<void>;
-      submitLabel: string;
-      onCancel?: () => void;
-    };
+    mode: 'edit';
+    initial: Product;
+    onSubmit: (data: ProductUpdate) => void | Promise<void>;
+    submitLabel: string;
+    onCancel?: () => void;
+  };
 
-const PACK_UNIT_TYPES = ['item', 'g', 'ml', 'kg', 'l'] as const;
+const PACK_UNIT_TYPES = ['item', 'g', 'ml', 'kg', 'l', 'm', 'cm', 'mm'] as const;
 
 export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: Props) {
   const { colors } = useTheme();
@@ -62,10 +62,10 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   useEffect(() => {
     listCategories()
       .then(setExistingCategories)
-      .catch(() => {}); // non-critical -- suggestions just won't show if this fails
+      .catch(() => { }); // non-critical -- suggestions just won't show if this fails
     listCompanies()
       .then(setExistingCompanies)
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   async function pickFromLibrary() {
