@@ -23,7 +23,7 @@ export interface Product {
   isEssential: boolean;         // pinned to the top of Products/Storage, marked with a star
   category: string | null;      // free-text, user-defined (e.g. "dairy", "cleaning")
   unitsPerPack: number | null;  // e.g. 500 grams total in the pack
-  packUnitType: 'item' | 'g' | 'ml' | 'kg' | 'l' | null; // what unitsPerPack is measured in -- drives price-per-reference
+  packUnitType: 'item' | 'g' | 'ml' | 'kg' | 'l' | 'm' | 'cm' | 'mm' | null; // what unitsPerPack is measured in -- drives price-per-reference
   averageDaysBetweenRestocks: number | null;
   manualOverrideDays: number | null;
   createdAt: string;            // ISO 8601
