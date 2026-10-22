@@ -22,6 +22,13 @@ import type { ThemeColors } from '../../theme/colors';
 import type { Product } from '../../types';
 import { rescheduleDigest } from '../../database/notifications';
 
+/** Alphabetical by what's shown on screen ("Company Name"), ignoring case. */
+function byDisplayName(a: Product, b: Product): number {
+  const nameA = `${a.company ? `${a.company} ` : ''}${a.name}`;
+  const nameB = `${b.company ? `${b.company} ` : ''}${b.name}`;
+  return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+}
+
 export default function ProductsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -68,7 +75,7 @@ export default function ProductsScreen() {
       : products;
     return [...filtered].sort((a, b) => {
       if (a.isEssential !== b.isEssential) return a.isEssential ? -1 : 1;
-      return a.name.localeCompare(b.name);
+      return byDisplayName(a, b);
     });
   }, [products, categoryFilter]);
 

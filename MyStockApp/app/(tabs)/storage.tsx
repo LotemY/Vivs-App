@@ -31,6 +31,13 @@ interface SessionEntry {
   current: number; // live value as +/- are tapped
 }
 
+/** Alphabetical by what's shown on screen ("Company Name"), ignoring case. */
+function byDisplayName(a: Product, b: Product): number {
+  const nameA = `${a.company ? `${a.company} ` : ''}${a.name}`;
+  const nameB = `${b.company ? `${b.company} ` : ''}${b.name}`;
+  return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+}
+
 export default function StorageScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -94,16 +101,19 @@ export default function StorageScreen() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [products]);
 
-  // Essential items always float to the top; within that, lowest effective
-  // quantity first (closest to running out). Scoped to whichever category
+  // In stock before out of stock, each group alphabetical (stars no longer
+  // jump the queue here). Scoped to whichever category
   // filter is selected (or everything, for "All").
   const visibleProducts = useMemo(() => {
     const filtered = categoryFilter
       ? products.filter((p) => p.category === categoryFilter)
       : products;
     return [...filtered].sort((a, b) => {
-      if (a.isEssential !== b.isEssential) return a.isEssential ? -1 : 1;
-      return (getEffectiveQuantity(a) ?? Infinity) - (getEffectiveQuantity(b) ?? Infinity);
+      // In stock first, out of stock after -- each group alphabetical.
+      const aInStock = (getEffectiveQuantity(a) ?? 0) > 0;
+      const bInStock = (getEffectiveQuantity(b) ?? 0) > 0;
+      if (aInStock !== bInStock) return aInStock ? -1 : 1;
+      return byDisplayName(a, b);
     });
   }, [products, categoryFilter]);
 
