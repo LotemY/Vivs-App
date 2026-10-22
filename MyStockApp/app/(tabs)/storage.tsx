@@ -446,23 +446,24 @@ function FilterPill({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    filterScroll: { flexGrow: 0, height: 49 },
+    filterScroll: { flexGrow: 0, flexShrink: 0 },   // no fixed height; never squeezed
     filterRow: {
       flexDirection: 'row',
+      alignItems: 'flex-start',   // pills keep their own height
       gap: 8,
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: 4,
-      paddingRight: 8, // small base padding; filterEndSpacer below does the real work
+      paddingRight: 8,
     },
     filterEndSpacer: { width: 24 },
     filterPill: {
-      flexShrink: 0, // never let a pill's own width get squeezed by the row
+      flexShrink: 0,
       paddingHorizontal: 14,
       paddingVertical: 5,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.textMuted,
     },
     filterPillText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
     header: {
@@ -534,7 +535,7 @@ function makeStyles(colors: ThemeColors) {
       height: 30,
       borderRadius: 15,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.textMuted,
       alignItems: 'center',
       justifyContent: 'center',
     },

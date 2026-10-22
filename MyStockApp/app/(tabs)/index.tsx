@@ -20,7 +20,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { PhotoViewer } from '../../components/PhotoViewer';
 import type { ThemeColors } from '../../theme/colors';
 import type { Product } from '../../types';
-   import { rescheduleDigest } from '../../database/notifications';
+import { rescheduleDigest } from '../../database/notifications';
 
 export default function ProductsScreen() {
   const router = useRouter();
@@ -249,23 +249,24 @@ function FilterPill({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    filterScroll: { flexGrow: 0, height: 48 },
+    filterScroll: { flexGrow: 0, flexShrink: 0 },   // no fixed height; never squeezed
     filterRow: {
       flexDirection: 'row',
+      alignItems: 'flex-start',   // pills keep their own height
       gap: 8,
       paddingHorizontal: 16,
       paddingTop: 10,
-      paddingBottom: 6,
-      paddingRight: 8, // small base padding; filterEndSpacer below does the real work
+      paddingBottom: 4,
+      paddingRight: 8,
     },
     filterEndSpacer: { width: 24 },
     filterPill: {
-      flexShrink: 0, // never let a pill's own width get squeezed by the row
+      flexShrink: 0,
       paddingHorizontal: 14,
       paddingVertical: 5,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.textMuted,
     },
     filterPillText: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -303,7 +304,7 @@ function makeStyles(colors: ThemeColors) {
       paddingVertical: 2,
       borderRadius: 4,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.textMuted,
       textTransform: 'uppercase',
     },
     meta: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
