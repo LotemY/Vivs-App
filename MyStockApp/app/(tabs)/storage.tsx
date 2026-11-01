@@ -10,7 +10,9 @@ import {
   listCategoryColors,
   setCategoryColor,
   archiveProduct,
+  deleteProduct,
 } from '../../database/productRepository';
+import { deleteProductPhoto } from '../../database/photoUpload';
 import {
   getEffectiveQuantity,
   getDaysRemaining,
@@ -31,6 +33,14 @@ interface SessionEntry {
   current: number; // live value as +/- are tapped
 }
 
+/** One line in the Storage list. `stack` is set on the front card of a stack of out-of-stock items. */
+type ListRow = {
+  key: string;
+  product: Product;
+  nested?: boolean;
+  stack?: { count: number; open: boolean };
+};
+
 /** Alphabetical by what's shown on screen ("Company Name"), ignoring case. */
 function byDisplayName(a: Product, b: Product): number {
   const nameA = `${a.company ? `${a.company} ` : ''}${a.name}`;
@@ -49,6 +59,9 @@ export default function StorageScreen() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // null = "All"
   // null = not in shopping mode. Present = { [productId]: SessionEntry }
   const [session, setSession] = useState<Record<number, SessionEntry> | null>(null);
+
+  // Which stacks of out-of-stock items are opened up (keyed by the in-stock item they hide behind).
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   // #5: full-size photo viewer state
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
@@ -117,6 +130,55 @@ export default function StorageScreen() {
     });
   }, [products, categoryFilter]);
 
+  // Out-of-stock items tuck behind the first in-stock item of their category,
+  // like a stack of cards. If a category has NOTHING in stock, its out-of-stock
+  // items stack behind the first of them instead (when there are 2 or more).
+  // Items without a category stay as normal rows. While adjusting, nothing is
+  // stacked -- you need every row's +/- buttons.
+  const listRows = useMemo<ListRow[]>(() => {
+    const inStock = (p: Product) => (getEffectiveQuantity(p) ?? 0) > 0;
+    if (session != null) {
+      return visibleProducts.map((p) => ({ key: `p-${p.id}`, product: p }));
+    }
+
+    const byCategory = new Map<string, { stocked: Product[]; out: Product[] }>();
+    for (const p of visibleProducts) {
+      if (!p.category) continue;
+      const g = byCategory.get(p.category) ?? { stocked: [], out: [] };
+      (inStock(p) ? g.stocked : g.out).push(p);
+      byCategory.set(p.category, g);
+    }
+
+    const hiddenByAnchor = new Map<number, Product[]>();
+    const hiddenIds = new Set<number>();
+    for (const g of byCategory.values()) {
+      if (g.out.length === 0) continue;
+      if (g.stocked.length > 0) {
+        hiddenByAnchor.set(g.stocked[0].id, g.out);
+        g.out.forEach((p) => hiddenIds.add(p.id));
+      } else if (g.out.length >= 2) {
+        hiddenByAnchor.set(g.out[0].id, g.out.slice(1));
+        g.out.slice(1).forEach((p) => hiddenIds.add(p.id));
+      }
+    }
+
+    const rows: ListRow[] = [];
+    for (const p of visibleProducts) {
+      if (hiddenIds.has(p.id)) continue;
+      const hidden = hiddenByAnchor.get(p.id);
+      if (!hidden) {
+        rows.push({ key: `p-${p.id}`, product: p });
+        continue;
+      }
+      const open = !!expanded[p.id];
+      rows.push({ key: `p-${p.id}`, product: p, stack: { count: hidden.length, open } });
+      if (open) {
+        for (const h of hidden) rows.push({ key: `p-${h.id}`, product: h, nested: true });
+      }
+    }
+    return rows;
+  }, [visibleProducts, expanded, session]);
+
   function startShopping() {
     const initial: Record<number, SessionEntry> = {};
     for (const p of products) {
@@ -127,16 +189,7 @@ export default function StorageScreen() {
   }
 
   function adjust(id: number, delta: number) {
-    // Pressing "-" while already at 0 doesn't try to go negative -- it
-    // means "I'm out," so offer to archive it out of Storage instead.
-    if (delta < 0) {
-      const entry = session?.[id];
-      if (entry && entry.current === 0) {
-        const product = products.find((p) => p.id === id);
-        if (product) confirmArchive(product);
-        return;
-      }
-    }
+    // Never goes below 0. Archiving now lives in the long-press menu.
     setSession((prev) => {
       if (!prev) return prev;
       const entry = prev[id];
@@ -145,32 +198,59 @@ export default function StorageScreen() {
     });
   }
 
-  function confirmArchive(product: Product) {
-    Alert.alert(
-      'Out of stock',
-      `"${product.name}" is at 0. Move it out of Storage until you buy it again? It stays in Products, and opening Edit on it later brings it back automatically.`,
-      [
-        { text: 'Not yet', style: 'cancel' },
-        { text: 'Archive', style: 'destructive', onPress: () => doArchive(product.id) },
-      ]
-    );
+  /** Drops a product from the on-screen list and any open adjust session. */
+  function removeLocal(id: number) {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setSession((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   async function doArchive(id: number) {
     try {
       await archiveProduct(id);
       rescheduleDigest(products.filter((p) => p.id !== id)); // best-effort, not awaited
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-      setSession((prev) => {
-        if (!prev) return prev;
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      removeLocal(id);
     } catch (err) {
       console.error('Failed to archive product:', err);
       Alert.alert("Couldn't archive", 'Check your connection and try again.');
     }
+  }
+
+  async function doDelete(product: Product) {
+    try {
+      await deleteProduct(product.id);
+      if (product.photoUrl) deleteProductPhoto(product.photoUrl); // best-effort, not awaited
+      rescheduleDigest(products.filter((p) => p.id !== product.id));
+      removeLocal(product.id);
+    } catch (err) {
+      console.error('Failed to delete product:', err);
+      Alert.alert("Couldn't delete", 'Check your connection and try again.');
+    }
+  }
+
+  function confirmDelete(product: Product) {
+    Alert.alert(
+      'Delete product?',
+      `"${product.name}" and its restock history will be removed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => doDelete(product) },
+      ]
+    );
+  }
+
+  // Long-press menu on any row: archive it out of Storage, or delete it.
+  function showItemMenu(product: Product) {
+    const label = `${product.company ? `${product.company} ` : ''}${product.name}`;
+    Alert.alert(label, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Archive', onPress: () => doArchive(product.id) },
+      { text: 'Delete', style: 'destructive', onPress: () => confirmDelete(product) },
+    ]);
   }
 
   function discard() {
@@ -226,6 +306,158 @@ export default function StorageScreen() {
 
   const shopping = session != null;
 
+  function renderProductRow(row: ListRow) {
+    const item = row.product;
+    const nested = row.nested;
+    const stack = row.stack;
+    const layers = stack && !stack.open ? Math.min(stack.count, 2) : 0;
+    const entry = session?.[item.id];
+    const changed = entry != null && entry.current !== entry.start;
+    const displayQuantity = entry ? entry.current : getEffectiveQuantity(item);
+    const daysLeft = getDaysRemaining(item);
+    const avgDays = avgRestockDays[item.id];
+    const ratePerDay = getConsumptionRatePerDay(item);
+    const catColor = item.category ? categoryColors[item.category] : undefined;
+    // Prediction says it's gone, but the saved count says otherwise. Just
+    // a label (not pressable); hidden once you've changed the row this
+    // session, since you're already correcting it.
+    const likelyOut = isLikelyOut(item) && !changed;
+
+    const daysLeftText =
+      daysLeft == null ? 'no rate set' : daysLeft <= 0 ? 'out soon' : `${daysLeft}d left`;
+    const avgText = avgDays != null ? ` · avg ${Math.round(avgDays)}d cycle` : '';
+    const rateText = ratePerDay != null ? ` · ${ratePerDay.toFixed(1)}/day` : '';
+
+    const card = (
+      <Pressable
+        style={[
+          styles.row,
+          nested && styles.rowNested,
+          stack && styles.rowStacked,
+          changed && styles.rowChanged,
+        ]}
+        onPress={
+          stack
+            ? () => setExpanded((prev) => ({ ...prev, [item.id]: !prev[item.id] }))
+            : undefined
+        }
+        onLongPress={() => showItemMenu(item)}
+      >
+        {/* #5: tap the thumbnail to view it full-size */}
+        <Pressable
+          onPress={() => item.photoUrl && setViewingPhoto(item.photoUrl)}
+          onLongPress={() => showItemMenu(item)}
+        >
+          {item.photoUrl ? (
+            <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
+          ) : (
+            <View style={styles.thumbnailPlaceholder}>
+              <Ionicons name="image-outline" size={18} color={colors.textMuted} />
+            </View>
+          )}
+        </Pressable>
+        <View style={styles.rowText}>
+          <View style={styles.nameRow}>
+            {item.isEssential && (
+              <Ionicons name="star" size={13} color={colors.accent} style={styles.star} />
+            )}
+            {/* #6: company + name shown together */}
+            <Text style={styles.name}>
+              {item.company ? `${item.company} ` : ''}
+              {item.name}
+            </Text>
+            {stack && (
+              <View style={styles.stackBadge}>
+                <Text style={styles.stackBadgeText}>
+                  {stack.open ? 'hide' : `+${stack.count} out`}
+                </Text>
+                <Ionicons
+                  name={stack.open ? 'chevron-up' : 'chevron-down'}
+                  size={11}
+                  color={colors.textMuted}
+                />
+              </View>
+            )}
+          </View>
+          {likelyOut ? (
+            <View style={styles.subRow}>
+              <Text style={styles.sub}>
+                {item.category ? (
+                  <Text style={catColor ? { color: catColor } : undefined}>
+                    {item.category}
+                  </Text>
+                ) : null}
+                {item.category ? ' · ' : ''}
+              </Text>
+              <View style={styles.likelyOutBadge}>
+                <Text style={styles.likelyOutText}>Likely out</Text>
+              </View>
+              <Text style={styles.sub}>
+                {rateText}
+                {avgText}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.sub}>
+              {item.category ? (
+                <Text style={catColor ? { color: catColor } : undefined}>
+                  {item.category}
+                </Text>
+              ) : null}
+              {item.category ? ' · ' : ''}
+              {daysLeftText}
+              {rateText}
+              {avgText}
+            </Text>
+          )}
+        </View>
+
+        {shopping ? (
+          <View style={styles.stepper}>
+            <Pressable
+              style={styles.stepperButton}
+              onPress={() => adjust(item.id, -1)}
+              accessibilityLabel={`Decrease ${item.name} quantity`}
+            >
+              <Ionicons name="remove" size={16} color={colors.textPrimary} />
+            </Pressable>
+            <Text style={[styles.quantity, changed && styles.quantityChanged]}>
+              {displayQuantity}
+            </Text>
+            <Pressable
+              style={styles.stepperButton}
+              onPress={() => adjust(item.id, 1)}
+              accessibilityLabel={`Increase ${item.name} quantity`}
+            >
+              <Ionicons name="add" size={16} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+        ) : (
+          <Text style={styles.quantity}>{displayQuantity ?? '—'}</Text>
+        )}
+      </Pressable>
+    );
+
+    if (layers === 0) return card;
+
+    // Cards peeking out from behind: the closest one is wider and peeks 6px,
+    // the one behind it is narrower and peeks 12px.
+    return (
+      <View style={{ paddingBottom: layers * 6 }}>
+        {Array.from({ length: layers }, (_, k) => layers - k).map((i) => (
+          <View
+            key={i}
+            style={[
+              styles.stackLayer,
+              { left: 16 + 10 * i, right: 16 + 10 * i, bottom: (layers - i) * 6 },
+            ]}
+          />
+        ))}
+        {card}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {!shopping && categories.length > 0 && (
@@ -270,11 +502,11 @@ export default function StorageScreen() {
       )}
 
       <FlatList
-        data={visibleProducts}
-        keyExtractor={(item) => String(item.id)}
+        data={listRows}
+        keyExtractor={(row) => row.key}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={visibleProducts.length === 0 && styles.emptyContainer}
+        contentContainerStyle={listRows.length === 0 && styles.emptyContainer}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
             {categoryFilter
@@ -282,106 +514,7 @@ export default function StorageScreen() {
               : 'Nothing to show yet — add products from the Products tab.'}
           </Text>
         }
-        renderItem={({ item }) => {
-          const entry = session?.[item.id];
-          const changed = entry != null && entry.current !== entry.start;
-          const displayQuantity = entry ? entry.current : getEffectiveQuantity(item);
-          const daysLeft = getDaysRemaining(item);
-          const avgDays = avgRestockDays[item.id];
-          const ratePerDay = getConsumptionRatePerDay(item);
-          const catColor = item.category ? categoryColors[item.category] : undefined;
-          // Prediction says it's gone, but the saved count says otherwise. Just
-          // a label (not pressable); hidden once you've changed the row this
-          // session, since you're already correcting it.
-          const likelyOut = isLikelyOut(item) && !changed;
-
-          const daysLeftText =
-            daysLeft == null ? 'no rate set' : daysLeft <= 0 ? 'out soon' : `${daysLeft}d left`;
-          const avgText = avgDays != null ? ` · avg ${Math.round(avgDays)}d cycle` : '';
-          const rateText = ratePerDay != null ? ` · ${ratePerDay.toFixed(1)}/day` : '';
-
-          return (
-            <View style={[styles.row, changed && styles.rowChanged]}>
-              {/* #5: tap the thumbnail to view it full-size */}
-              <Pressable onPress={() => item.photoUrl && setViewingPhoto(item.photoUrl)}>
-                {item.photoUrl ? (
-                  <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
-                ) : (
-                  <View style={styles.thumbnailPlaceholder}>
-                    <Ionicons name="image-outline" size={18} color={colors.textMuted} />
-                  </View>
-                )}
-              </Pressable>
-              <View style={styles.rowText}>
-                <View style={styles.nameRow}>
-                  {item.isEssential && (
-                    <Ionicons name="star" size={13} color={colors.accent} style={styles.star} />
-                  )}
-                  {/* #6: company + name shown together */}
-                  <Text style={styles.name}>
-                    {item.company ? `${item.company} ` : ''}
-                    {item.name}
-                  </Text>
-                </View>
-                {likelyOut ? (
-                  <View style={styles.subRow}>
-                    <Text style={styles.sub}>
-                      {item.category ? (
-                        <Text style={catColor ? { color: catColor } : undefined}>
-                          {item.category}
-                        </Text>
-                      ) : null}
-                      {item.category ? ' · ' : ''}
-                    </Text>
-                    <View style={styles.likelyOutBadge}>
-                      <Text style={styles.likelyOutText}>Likely out</Text>
-                    </View>
-                    <Text style={styles.sub}>
-                      {rateText}
-                      {avgText}
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.sub}>
-                    {item.category ? (
-                      <Text style={catColor ? { color: catColor } : undefined}>
-                        {item.category}
-                      </Text>
-                    ) : null}
-                    {item.category ? ' · ' : ''}
-                    {daysLeftText}
-                    {rateText}
-                    {avgText}
-                  </Text>
-                )}
-              </View>
-
-              {shopping ? (
-                <View style={styles.stepper}>
-                  <Pressable
-                    style={styles.stepperButton}
-                    onPress={() => adjust(item.id, -1)}
-                    accessibilityLabel={`Decrease ${item.name} quantity`}
-                  >
-                    <Ionicons name="remove" size={16} color={colors.textPrimary} />
-                  </Pressable>
-                  <Text style={[styles.quantity, changed && styles.quantityChanged]}>
-                    {displayQuantity}
-                  </Text>
-                  <Pressable
-                    style={styles.stepperButton}
-                    onPress={() => adjust(item.id, 1)}
-                    accessibilityLabel={`Increase ${item.name} quantity`}
-                  >
-                    <Ionicons name="add" size={16} color={colors.textPrimary} />
-                  </Pressable>
-                </View>
-              ) : (
-                <Text style={styles.quantity}>{displayQuantity ?? '—'}</Text>
-              )}
-            </View>
-          );
-        }}
+        renderItem={({ item: row }) => renderProductRow(row)}
       />
 
       {shopping && (
@@ -506,6 +639,32 @@ function makeStyles(colors: ThemeColors) {
       borderBottomColor: colors.border,
     },
     rowChanged: { backgroundColor: colors.changedRowBg },
+    rowNested: {
+      paddingLeft: 28,
+      borderLeftWidth: 2,
+      borderLeftColor: colors.border,
+    },
+    rowStacked: { backgroundColor: colors.background },
+    stackLayer: {
+      position: 'absolute',
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    stackBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      marginLeft: 8,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.textMuted,
+    },
+    stackBadgeText: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
     thumbnail: { width: 40, height: 40, borderRadius: 8, marginRight: 12 },
     thumbnailPlaceholder: {
       width: 40,

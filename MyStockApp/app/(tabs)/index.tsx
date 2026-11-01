@@ -12,7 +12,13 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { listProducts, deleteProduct, listCategoryColors } from '../../database/productRepository';
+import {
+  listProducts,
+  deleteProduct,
+  listCategoryColors,
+  archiveProduct,
+  unarchiveProduct,
+} from '../../database/productRepository';
 import { cancelNotificationForProduct } from '../../database/notifications';
 import { deleteProductPhoto } from '../../database/photoUpload';
 import { getPricePerReference } from '../../database/pricing';
@@ -36,6 +42,7 @@ export default function ProductsScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null); // null = "All"
+  const [showArchived, setShowArchived] = useState(false); // the "Archived" pill
   const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
 
   // #5: full-size photo viewer state
@@ -57,27 +64,66 @@ export default function ProductsScreen() {
     }, [load])
   );
 
-  // Every category actually in use right now, alphabetically -- the filter
+  // Active = tracked in Storage. Archived ones live behind their own pill.
+  const activeProducts = useMemo(() => products.filter((p) => p.inStorage), [products]);
+  const archivedProducts = useMemo(() => products.filter((p) => !p.inStorage), [products]);
+  // If the last archived item gets restored/deleted while viewing the pill, fall back to active.
+  const archivedView = showArchived && archivedProducts.length > 0;
+
+  // Every category in use by an ACTIVE product, alphabetically -- the filter
   // bar is fully dynamic, not a fixed list.
   const categories = useMemo(() => {
     const set = new Set<string>();
-    for (const p of products) {
+    for (const p of activeProducts) {
       if (p.category) set.add(p.category);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products]);
+  }, [activeProducts]);
 
-  // Essential items always float to the top; within that, sorted by name.
-  // Scoped to whichever category filter is selected (or everything, for "All").
+  // Essential items always float to the top; within that, alphabetical.
+  // The archived view is a plain A-Z list of archived items.
   const visibleProducts = useMemo(() => {
+    if (archivedView) return [...archivedProducts].sort(byDisplayName);
     const filtered = categoryFilter
-      ? products.filter((p) => p.category === categoryFilter)
-      : products;
+      ? activeProducts.filter((p) => p.category === categoryFilter)
+      : activeProducts;
     return [...filtered].sort((a, b) => {
       if (a.isEssential !== b.isEssential) return a.isEssential ? -1 : 1;
       return byDisplayName(a, b);
     });
-  }, [products, categoryFilter]);
+  }, [activeProducts, archivedProducts, archivedView, categoryFilter]);
+
+  async function doArchive(product: Product) {
+    try {
+      await archiveProduct(product.id);
+      load();
+    } catch (err) {
+      console.error('Failed to archive product:', err);
+      Alert.alert("Couldn't archive", 'Check your connection and try again.');
+    }
+  }
+
+  async function doRestore(product: Product) {
+    try {
+      await unarchiveProduct(product.id);
+      load();
+    } catch (err) {
+      console.error('Failed to restore product:', err);
+      Alert.alert("Couldn't restore", 'Check your connection and try again.');
+    }
+  }
+
+  // Long-press menu: archive/restore or delete.
+  function showItemMenu(product: Product) {
+    const label = `${product.company ? `${product.company} ` : ''}${product.name}`;
+    Alert.alert(label, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      product.inStorage
+        ? { text: 'Archive', onPress: () => doArchive(product) }
+        : { text: 'Restore to Storage', onPress: () => doRestore(product) },
+      { text: 'Delete', style: 'destructive', onPress: () => confirmDelete(product) },
+    ]);
+  }
 
   function confirmDelete(product: Product) {
     Alert.alert(
@@ -103,7 +149,7 @@ export default function ProductsScreen() {
 
   return (
     <View style={styles.container}>
-      {categories.length > 0 && (
+      {(categories.length > 0 || archivedProducts.length > 0) && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -112,16 +158,30 @@ export default function ProductsScreen() {
         >
           <FilterPill
             label="All"
-            active={categoryFilter === null}
-            onPress={() => setCategoryFilter(null)}
+            active={!archivedView && categoryFilter === null}
+            onPress={() => {
+              setShowArchived(false);
+              setCategoryFilter(null);
+            }}
             colors={colors}
           />
+          {archivedProducts.length > 0 && (
+            <FilterPill
+              label={`Archived (${archivedProducts.length})`}
+              active={archivedView}
+              onPress={() => setShowArchived(true)}
+              colors={colors}
+            />
+          )}
           {categories.map((c) => (
             <FilterPill
               key={c}
               label={c}
-              active={categoryFilter === c}
-              onPress={() => setCategoryFilter(c)}
+              active={!archivedView && categoryFilter === c}
+              onPress={() => {
+                setShowArchived(false);
+                setCategoryFilter(c);
+              }}
               pillColor={categoryColors[c]}
               colors={colors}
             />
@@ -142,7 +202,9 @@ export default function ProductsScreen() {
         contentContainerStyle={visibleProducts.length === 0 && styles.emptyContainer}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
-            {categoryFilter
+            {archivedView
+              ? 'Nothing archived.'
+              : categoryFilter
               ? `No products in "${categoryFilter}" yet.`
               : 'No products yet. Tap + to add your first one.'}
           </Text>
@@ -161,10 +223,13 @@ export default function ProductsScreen() {
             <Pressable
               style={styles.row}
               onPress={() => router.push(`/product/${item.id}`)}
-              onLongPress={() => confirmDelete(item)}
+              onLongPress={() => showItemMenu(item)}
             >
               {/* #5: tap the thumbnail to view it full-size (long-press still deletes) */}
-              <Pressable onPress={() => item.photoUrl && setViewingPhoto(item.photoUrl)}>
+              <Pressable
+                onPress={() => item.photoUrl && setViewingPhoto(item.photoUrl)}
+                onLongPress={() => showItemMenu(item)}
+              >
                 {item.photoUrl ? (
                   <Image source={{ uri: item.photoUrl }} style={styles.thumbnail} />
                 ) : (
@@ -183,9 +248,6 @@ export default function ProductsScreen() {
                     {item.company ? `${item.company} ` : ''}
                     {item.name}
                   </Text>
-                  {!item.inStorage && (
-                    <Text style={styles.archivedTag}>Archived</Text>
-                  )}
                 </View>
                 <Text style={styles.meta}>
                   {item.category ? (

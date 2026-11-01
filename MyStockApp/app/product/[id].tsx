@@ -12,7 +12,13 @@ import {
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ProductForm } from '../../components/ProductForm';
-import { getProduct, updateProduct, deleteProduct } from '../../database/productRepository';
+import {
+  getProduct,
+  updateProduct,
+  deleteProduct,
+  archiveProduct,
+  unarchiveProduct,
+} from '../../database/productRepository';
 import { cancelNotificationForProduct } from '../../database/notifications';
 import { useTheme } from '../../theme/ThemeContext';
 import type { ThemeColors } from '../../theme/colors';
@@ -54,6 +60,13 @@ export default function EditProductScreen() {
     router.replace('/');
   }
 
+  async function handleArchiveToggle() {
+    if (!product) return;
+    if (product.inStorage) await archiveProduct(productId);
+    else await unarchiveProduct(productId);
+    router.replace('/');
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -86,6 +99,11 @@ export default function EditProductScreen() {
           submitLabel="Save Changes"
           onCancel={() => router.back()}
         />
+        <Pressable style={styles.archiveButton} onPress={handleArchiveToggle}>
+          <Text style={styles.archiveText}>
+            {product.inStorage ? 'Archive Product' : 'Restore to Storage'}
+          </Text>
+        </Pressable>
         <Pressable style={styles.deleteButton} onPress={handleDelete}>
           <Text style={styles.deleteText}>Delete Product</Text>
         </Pressable>
@@ -98,6 +116,8 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     notFoundText: { color: colors.textPrimary },
+    archiveButton: { marginHorizontal: 16, marginTop: 8, alignItems: 'center', padding: 12 },
+    archiveText: { color: colors.accent, fontSize: 15, fontWeight: '600' },
     deleteButton: { marginHorizontal: 16, marginTop: 8, alignItems: 'center', padding: 12 },
     deleteText: { color: colors.danger, fontSize: 15, fontWeight: '600' },
   });

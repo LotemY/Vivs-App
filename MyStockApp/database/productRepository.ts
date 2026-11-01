@@ -103,7 +103,10 @@ export async function archiveProduct(id: number): Promise<void> {
   if (error) throw error;
   if (product) logEvent({ type: 'archived', productId: id, productName: displayName(product) });
 }
-
+export async function unarchiveProduct(id: number): Promise<void> {
+  const { error } = await supabase.from('products').update({ in_storage: true }).eq('id', id);
+  if (error) throw error;
+}
 export async function deleteProduct(id: number): Promise<void> {
   const product = await getProduct(id);
   // restock_log rows for this product are removed automatically via ON DELETE CASCADE
