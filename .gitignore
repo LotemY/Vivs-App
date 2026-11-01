@@ -41,3 +41,6 @@ yarn-error.*
 # generated native folders
 /ios
 */android
+
+# private files
+MyStockApp/database/birthdays.local.ts
