@@ -54,6 +54,7 @@ export async function createProduct(data: NewProduct): Promise<number> {
       pack_unit_type: data.packUnitType,
       manual_override_days: data.manualOverrideDays,
       in_storage: true, // every new product starts tracked in Storage
+      tag: data.tag,
     })
     .select('id')
     .single();
@@ -82,10 +83,10 @@ export async function updateProduct(id: number, data: ProductUpdate): Promise<vo
       units_per_pack: data.unitsPerPack,
       pack_unit_type: data.packUnitType,
       manual_override_days: data.manualOverrideDays,
-      // Saving an edit always un-archives -- if you're back in here
-      // touching a product's details, you're using it again. No separate
-      // "bring it back" button needed.
-      in_storage: true,
+      // in_storage is intentionally omitted: editing details (including the
+      // stack tag) must not change whether a product is archived. Use
+      // archiveProduct / unarchiveProduct for that.
+      tag: data.tag,
     })
     .eq('id', id);
 
@@ -95,7 +96,7 @@ export async function updateProduct(id: number, data: ProductUpdate): Promise<vo
 /**
  * Archives a product out of Storage/shopping mode without deleting it --
  * it stays in Products (the full catalog) and its history is untouched.
- * Triggered from Storage by pressing "-" while a product is already at 0.
+ * Triggered from the long-press menu (Storage/Products) or the product page.
  */
 export async function archiveProduct(id: number): Promise<void> {
   const product = await getProduct(id);
@@ -221,6 +222,15 @@ export async function listCompanies(): Promise<string[]> {
   return Array.from(unique).sort((a, b) => a.localeCompare(b));
 }
 
+export async function listTags(): Promise<string[]> {
+  const { data, error } = await supabase.from('products').select('tag').not('tag', 'is', null);
+  if (error) throw error;
+  const unique = new Set<string>();
+  for (const row of data as { tag: string | null }[]) {
+    if (row.tag) unique.add(row.tag);
+  }
+  return Array.from(unique).sort((a, b) => a.localeCompare(b));
+}
 /**
  * All restock_log rows for every product in one query, so Storage can
  * compute each product's average/median restock cycle without firing

@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import type { NewProduct, ProductUpdate, Product } from '../types';
 import { uploadProductPhoto, deleteProductPhoto } from '../database/photoUpload';
-import { listCategories, listCompanies } from '../database/productRepository';
+import { listCategories, listCompanies, listTags } from '../database/productRepository';
 import { getPricePerReference } from '../database/pricing';
 import { useTheme } from '../theme/ThemeContext';
 import { PhotoOptionsSheet } from './PhotoOptionsSheet';
@@ -45,6 +45,8 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   ); // #7
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
   const [existingCompanies, setExistingCompanies] = useState<string[]>([]);
+  const [tag, setTag] = useState(initial?.tag ?? '');
+  const [existingTags, setExistingTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -65,6 +67,9 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
       .catch(() => { }); // non-critical -- suggestions just won't show if this fails
     listCompanies()
       .then(setExistingCompanies)
+      .catch(() => { });
+    listTags()
+      .then(setExistingTags)
       .catch(() => { });
   }, []);
 
@@ -137,6 +142,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
         unit: unit.trim() || null,
         isEssential: essential,
         category: category.trim() || null,
+        tag: tag.trim() || null,
         unitsPerPack: unitsPerPack.trim() ? Number(unitsPerPack) : null,
         packUnitType,
         photoUrl: finalPhotoUrl,
@@ -164,7 +170,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   const companySuggestions = existingCompanies.filter(
     (c) => c.toLowerCase() !== company.trim().toLowerCase()
   );
-
+  const tagSuggestions = existingTags.filter((t) => t.toLowerCase() !== tag.trim().toLowerCase());
   const priceNum = price.trim() ? Number(price) : null;
   const unitsPerPackNum = unitsPerPack.trim() ? Number(unitsPerPack) : null;
   // #7: normalized price-per-reference (e.g. "1.20 € per 100g"), replacing
@@ -253,6 +259,27 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
             {categorySuggestions.map((c) => (
               <Pressable key={c} style={styles.chip} onPress={() => setCategory(c)}>
                 <Text style={styles.chipText}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </Field>
+
+      {/* Stack tag: never shown in lists, only used to group out-of-stock
+          items together in Storage (e.g. all kinds of milk -> "milk") */}
+      <Field colors={colors} label="Stack tag (optional)">
+        <TextInput
+          style={styles.input}
+          value={tag}
+          onChangeText={setTag}
+          placeholder="e.g. milk -- same tag stacks together"
+          placeholderTextColor={colors.textMuted}
+        />
+        {tagSuggestions.length > 0 && (
+          <View style={styles.chipRow}>
+            {tagSuggestions.map((t) => (
+              <Pressable key={t} style={styles.chip} onPress={() => setTag(t)}>
+                <Text style={styles.chipText}>{t}</Text>
               </Pressable>
             ))}
           </View>

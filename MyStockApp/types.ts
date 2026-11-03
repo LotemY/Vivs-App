@@ -28,6 +28,7 @@ export interface Product {
   manualOverrideDays: number | null;
   createdAt: string;            // ISO 8601
   inStorage: boolean;           // false = archived out of Storage/shopping mode, still in Products
+  tag: string | null;           // stacking group, e.g. "milk" -- never shown in lists
 }
 
 /**

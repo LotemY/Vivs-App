@@ -127,10 +127,10 @@ export default function StorageScreen() {
     });
   }, [products, categoryFilter]);
 
-  // Out-of-stock items tuck behind the first in-stock item of their category,
-  // like a stack of cards. If a category has NOTHING in stock, its out-of-stock
-  // items stack behind the first of them instead (when there are 2 or more).
-  // Items without a category stay as normal rows. While adjusting, nothing is
+  // Out-of-stock items tuck behind the first in-stock item of their tag (or
+  // category, when they have no tag), like a stack of cards. If a group has
+  // NOTHING in stock, its out-of-stock items stack behind the first of them
+  // instead (when there are 2 or more). Items with neither stay as normal rows. While adjusting, nothing is
   // stacked -- you need every row's +/- buttons.
   const listRows = useMemo<ListRow[]>(() => {
     const inStock = (p: Product) => (getEffectiveQuantity(p) ?? 0) > 0;
@@ -138,17 +138,26 @@ export default function StorageScreen() {
       return visibleProducts.map((p) => ({ kind: 'product', key: `p-${p.id}`, product: p }));
     }
 
-    const byCategory = new Map<string, { stocked: Product[]; out: Product[] }>();
+    // Stacks form by TAG (e.g. every kind of milk has the tag "milk"). Items
+    // with no tag fall back to stacking by category, like before.
+    const stackKey = (p: Product): string | null => {
+      const tag = p.tag?.trim().toLowerCase();
+      if (tag) return `tag:${tag}`;
+      return p.category ? `cat:${p.category}` : null;
+    };
+
+    const byGroup = new Map<string, { stocked: Product[]; out: Product[] }>();
     for (const p of visibleProducts) {
-      if (!p.category) continue;
-      const g = byCategory.get(p.category) ?? { stocked: [], out: [] };
+      const key = stackKey(p);
+      if (!key) continue;
+      const g = byGroup.get(key) ?? { stocked: [], out: [] };
       (inStock(p) ? g.stocked : g.out).push(p);
-      byCategory.set(p.category, g);
+      byGroup.set(key, g);
     }
 
     const hiddenByAnchor = new Map<number, Product[]>();
     const hiddenIds = new Set<number>();
-    for (const g of byCategory.values()) {
+    for (const g of byGroup.values()) {
       if (g.out.length === 0) continue;
       if (g.stocked.length > 0) {
         hiddenByAnchor.set(g.stocked[0].id, g.out);

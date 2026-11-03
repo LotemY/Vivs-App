@@ -16,11 +16,12 @@ export interface ProductRow {
   is_essential: boolean;
   category: string | null;
   units_per_pack: number | null;
-  pack_unit_type: 'item' | 'g' | 'ml' | 'kg' | 'l' | null;
+  pack_unit_type: 'item' | 'g' | 'ml' | 'kg' | 'l' | 'm' | 'cm' | 'mm' | null;
   average_days_between_restocks: number | null;
   manual_override_days: number | null;
   created_at: string;
   in_storage: boolean;
+  tag: string | null;
 }
 
 export interface RestockLogRow {
@@ -50,6 +51,7 @@ export function rowToProduct(row: ProductRow): Product {
     manualOverrideDays: row.manual_override_days,
     createdAt: row.created_at,
     inStorage: row.in_storage,
+    tag: row.tag,
   };
 }
 
