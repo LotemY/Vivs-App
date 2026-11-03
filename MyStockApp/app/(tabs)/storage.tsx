@@ -33,13 +33,10 @@ interface SessionEntry {
   current: number; // live value as +/- are tapped
 }
 
-/** One line in the Storage list. `stack` is set on the front card of a stack of out-of-stock items. */
-type ListRow = {
-  key: string;
-  product: Product;
-  nested?: boolean;
-  stack?: { count: number; open: boolean };
-};
+/** One line in the Storage list: a product, or the "N out of stock" toggle under a stack's front item. */
+type ListRow =
+  | { kind: 'product'; key: string; product: Product; nested?: boolean }
+  | { kind: 'stack'; key: string; anchorId: number; count: number; open: boolean };
 
 /** Alphabetical by what's shown on screen ("Company Name"), ignoring case. */
 function byDisplayName(a: Product, b: Product): number {
@@ -138,7 +135,7 @@ export default function StorageScreen() {
   const listRows = useMemo<ListRow[]>(() => {
     const inStock = (p: Product) => (getEffectiveQuantity(p) ?? 0) > 0;
     if (session != null) {
-      return visibleProducts.map((p) => ({ key: `p-${p.id}`, product: p }));
+      return visibleProducts.map((p) => ({ kind: 'product', key: `p-${p.id}`, product: p }));
     }
 
     const byCategory = new Map<string, { stocked: Product[]; out: Product[] }>();
@@ -165,15 +162,15 @@ export default function StorageScreen() {
     const rows: ListRow[] = [];
     for (const p of visibleProducts) {
       if (hiddenIds.has(p.id)) continue;
+      rows.push({ kind: 'product', key: `p-${p.id}`, product: p });
       const hidden = hiddenByAnchor.get(p.id);
-      if (!hidden) {
-        rows.push({ key: `p-${p.id}`, product: p });
-        continue;
-      }
+      if (!hidden) continue;
       const open = !!expanded[p.id];
-      rows.push({ key: `p-${p.id}`, product: p, stack: { count: hidden.length, open } });
+      rows.push({ kind: 'stack', key: `s-${p.id}`, anchorId: p.id, count: hidden.length, open });
       if (open) {
-        for (const h of hidden) rows.push({ key: `p-${h.id}`, product: h, nested: true });
+        for (const h of hidden) {
+          rows.push({ kind: 'product', key: `p-${h.id}`, product: h, nested: true });
+        }
       }
     }
     return rows;
@@ -306,11 +303,7 @@ export default function StorageScreen() {
 
   const shopping = session != null;
 
-  function renderProductRow(row: ListRow) {
-    const item = row.product;
-    const nested = row.nested;
-    const stack = row.stack;
-    const layers = stack && !stack.open ? Math.min(stack.count, 2) : 0;
+  function renderProductRow(item: Product, nested?: boolean) {
     const entry = session?.[item.id];
     const changed = entry != null && entry.current !== entry.start;
     const displayQuantity = entry ? entry.current : getEffectiveQuantity(item);
@@ -328,19 +321,9 @@ export default function StorageScreen() {
     const avgText = avgDays != null ? ` · avg ${Math.round(avgDays)}d cycle` : '';
     const rateText = ratePerDay != null ? ` · ${ratePerDay.toFixed(1)}/day` : '';
 
-    const card = (
+    return (
       <Pressable
-        style={[
-          styles.row,
-          nested && styles.rowNested,
-          stack && styles.rowStacked,
-          changed && styles.rowChanged,
-        ]}
-        onPress={
-          stack
-            ? () => setExpanded((prev) => ({ ...prev, [item.id]: !prev[item.id] }))
-            : undefined
-        }
+        style={[styles.row, nested && styles.rowNested, changed && styles.rowChanged]}
         onLongPress={() => showItemMenu(item)}
       >
         {/* #5: tap the thumbnail to view it full-size */}
@@ -366,18 +349,6 @@ export default function StorageScreen() {
               {item.company ? `${item.company} ` : ''}
               {item.name}
             </Text>
-            {stack && (
-              <View style={styles.stackBadge}>
-                <Text style={styles.stackBadgeText}>
-                  {stack.open ? 'hide' : `+${stack.count} out`}
-                </Text>
-                <Ionicons
-                  name={stack.open ? 'chevron-up' : 'chevron-down'}
-                  size={11}
-                  color={colors.textMuted}
-                />
-              </View>
-            )}
           </View>
           {likelyOut ? (
             <View style={styles.subRow}>
@@ -437,24 +408,35 @@ export default function StorageScreen() {
         )}
       </Pressable>
     );
+  }
 
-    if (layers === 0) return card;
-
-    // Cards peeking out from behind: the closest one is wider and peeks 6px,
-    // the one behind it is narrower and peeks 12px.
+  /** The slim "N out of stock" card under a stack's front item, with up to two cards peeking out behind it. */
+  function renderStackToggle(row: Extract<ListRow, { kind: 'stack' }>) {
+    const layers = row.open ? 0 : Math.min(row.count, 2);
     return (
-      <View style={{ paddingBottom: layers * 6 }}>
+      <Pressable
+        style={[styles.stackWrap, { height: 6 + 28 + layers * 6 }]}
+        onPress={() => setExpanded((prev) => ({ ...prev, [row.anchorId]: !prev[row.anchorId] }))}
+        accessibilityLabel={row.open ? 'Hide out of stock items' : 'Show out of stock items'}
+      >
+        {/* cards peeking out from behind, furthest back first */}
         {Array.from({ length: layers }, (_, k) => layers - k).map((i) => (
           <View
             key={i}
-            style={[
-              styles.stackLayer,
-              { left: 16 + 10 * i, right: 16 + 10 * i, bottom: (layers - i) * 6 },
-            ]}
+            style={[styles.stackLayer, { left: 16 + 8 * i, right: 16 + 8 * i, top: 6 + 6 * i }]}
           />
         ))}
-        {card}
-      </View>
+        <View style={styles.stackFront}>
+          <Text style={styles.stackText}>
+            {row.open ? `Hide ${row.count} out of stock` : `${row.count} out of stock`}
+          </Text>
+          <Ionicons
+            name={row.open ? 'chevron-up' : 'chevron-down'}
+            size={14}
+            color={colors.textMuted}
+          />
+        </View>
+      </Pressable>
     );
   }
 
@@ -514,7 +496,9 @@ export default function StorageScreen() {
               : 'Nothing to show yet — add products from the Products tab.'}
           </Text>
         }
-        renderItem={({ item: row }) => renderProductRow(row)}
+        renderItem={({ item: row }) =>
+          row.kind === 'product' ? renderProductRow(row.product, row.nested) : renderStackToggle(row)
+        }
       />
 
       {shopping && (
@@ -639,32 +623,32 @@ function makeStyles(colors: ThemeColors) {
       borderBottomColor: colors.border,
     },
     rowChanged: { backgroundColor: colors.changedRowBg },
-    rowNested: {
-      paddingLeft: 28,
-      borderLeftWidth: 2,
-      borderLeftColor: colors.border,
-    },
-    rowStacked: { backgroundColor: colors.background },
+    rowNested: { paddingLeft: 28 },
+    stackWrap: { position: 'relative' },
     stackLayer: {
       position: 'absolute',
-      height: 20,
+      height: 28,
       borderRadius: 10,
+      backgroundColor: colors.placeholderBg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    stackFront: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      top: 6,
+      height: 28,
+      borderRadius: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
       backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
-    stackBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 3,
-      marginLeft: 8,
-      paddingHorizontal: 7,
-      paddingVertical: 2,
-      borderRadius: 10,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.textMuted,
-    },
-    stackBadgeText: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
+    stackText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
     thumbnail: { width: 40, height: 40, borderRadius: 8, marginRight: 12 },
     thumbnailPlaceholder: {
       width: 40,
