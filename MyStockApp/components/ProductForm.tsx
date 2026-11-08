@@ -162,15 +162,11 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
     }
   }
 
-  // Existing categories, minus whatever's already typed -- no point
-  // suggesting the one you already have selected.
-  const categorySuggestions = existingCategories.filter(
-    (c) => c.toLowerCase() !== category.trim().toLowerCase()
-  );
-  const companySuggestions = existingCompanies.filter(
-    (c) => c.toLowerCase() !== company.trim().toLowerCase()
-  );
-  const tagSuggestions = existingTags.filter((t) => t.toLowerCase() !== tag.trim().toLowerCase());
+  // Autocomplete for Company / Category / Stack tag: nothing shows until you
+  // start typing, then only matching existing values.
+  const categorySuggestions = matchSuggestions(existingCategories, category);
+  const companySuggestions = matchSuggestions(existingCompanies, company);
+  const tagSuggestions = matchSuggestions(existingTags, tag);
   const priceNum = price.trim() ? Number(price) : null;
   const unitsPerPackNum = unitsPerPack.trim() ? Number(unitsPerPack) : null;
   // #7: normalized price-per-reference (e.g. "1.20 € per 100g"), replacing
@@ -214,15 +210,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
           placeholder="e.g. G&G"
           placeholderTextColor={colors.textMuted}
         />
-        {companySuggestions.length > 0 && (
-          <View style={styles.chipRow}>
-            {companySuggestions.map((c) => (
-              <Pressable key={c} style={styles.chip} onPress={() => setCompany(c)}>
-                <Text style={styles.chipText}>{c}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        <Suggestions items={companySuggestions} onPick={setCompany} colors={colors} />
       </Field>
 
       <Field colors={colors} label="Name">
@@ -254,15 +242,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
           placeholder="e.g. dairy, cleaning, vegetables"
           placeholderTextColor={colors.textMuted}
         />
-        {categorySuggestions.length > 0 && (
-          <View style={styles.chipRow}>
-            {categorySuggestions.map((c) => (
-              <Pressable key={c} style={styles.chip} onPress={() => setCategory(c)}>
-                <Text style={styles.chipText}>{c}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        <Suggestions items={categorySuggestions} onPick={setCategory} colors={colors} />
       </Field>
 
       {/* Stack tag: never shown in lists, only used to group out-of-stock
@@ -275,15 +255,7 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
           placeholder="e.g. milk -- same tag stacks together"
           placeholderTextColor={colors.textMuted}
         />
-        {tagSuggestions.length > 0 && (
-          <View style={styles.chipRow}>
-            {tagSuggestions.map((t) => (
-              <Pressable key={t} style={styles.chip} onPress={() => setTag(t)}>
-                <Text style={styles.chipText}>{t}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        <Suggestions items={tagSuggestions} onPick={setTag} colors={colors} />
       </Field>
 
       <Field colors={colors} label="Unit">
@@ -367,6 +339,51 @@ export function ProductForm({ mode, initial, onSubmit, submitLabel, onCancel }: 
   );
 }
 
+/**
+ * Existing values that match what's been typed (starts-with first, max 5).
+ * An exact match is hidden, but a different-capitalisation match is still
+ * offered so you can snap to the existing spelling ("dairy" -> "Dairy").
+ */
+function matchSuggestions(all: string[], typed: string): string[] {
+  const raw = typed.trim();
+  const q = raw.toLowerCase();
+  if (!q) return [];
+  return all
+    .filter((v) => v !== raw && v.toLowerCase().includes(q))
+    .sort(
+      (a, b) =>
+        Number(b.toLowerCase().startsWith(q)) - Number(a.toLowerCase().startsWith(q))
+    )
+    .slice(0, 5);
+}
+
+/** Small dropdown list under a text field; tap a row to fill the field. */
+function Suggestions({
+  items,
+  onPick,
+  colors,
+}: {
+  items: string[];
+  onPick: (value: string) => void;
+  colors: ThemeColors;
+}) {
+  const styles = makeStyles(colors);
+  if (items.length === 0) return null;
+  return (
+    <View style={styles.suggestBox}>
+      {items.map((v, i) => (
+        <Pressable
+          key={v}
+          style={[styles.suggestRow, i > 0 && styles.suggestRowBorder]}
+          onPress={() => onPick(v)}
+        >
+          <Text style={styles.suggestText}>{v}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function Field({
   label,
   children,
@@ -444,6 +461,17 @@ function makeStyles(colors: ThemeColors) {
       backgroundColor: colors.surfaceAlt,
     },
     chipText: { fontSize: 13, color: colors.textSecondary },
+    suggestBox: {
+      marginTop: 6,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceAlt,
+      overflow: 'hidden',
+    },
+    suggestRow: { paddingHorizontal: 12, paddingVertical: 10 },
+    suggestRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+    suggestText: { fontSize: 15, color: colors.textPrimary },
     priceInputWrap: {
       alignSelf: 'flex-start',
       width: '50%',
